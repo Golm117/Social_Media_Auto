@@ -75,9 +75,16 @@ export function computeDurationMs(track: CoddyMascotTrack, timings: CoddyWordTim
   return Math.max(track.totalMs, lastTiming) + VIDEO_TAIL_MS;
 }
 
+/** Mascot segment active at `ms` (holds the last segment after the track ends). */
+export function segmentAt(track: CoddyMascotTrack, ms: number): CoddyMascotSegment | null {
+  return (
+    track.segments.find((s) => ms >= s.startMs && ms < s.endMs) ?? track.segments.at(-1) ?? null
+  );
+}
+
 /** Which sprite sub-frame is visible at `ms`, given the mascot track. */
 export function frameAt(track: CoddyMascotTrack, ms: number): CoddyAtlasFrame | null {
-  const seg = track.segments.find((s) => ms >= s.startMs && ms < s.endMs) ?? track.segments.at(-1);
+  const seg = segmentAt(track, ms);
   if (!seg || seg.frames.length === 0) return null;
   const elapsed = Math.max(0, ms - seg.startMs);
   const idx = Math.floor((elapsed / 1000) * seg.fps) % seg.frames.length;

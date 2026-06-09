@@ -5,6 +5,7 @@ import {
   activeWordIndex,
   computeDurationMs,
   frameAt,
+  segmentAt,
 } from "./coddy-props.js";
 
 const track: CoddyMascotTrack = {
@@ -54,6 +55,19 @@ describe("frameAt", () => {
   });
   it("returns null when no frames", () => {
     expect(frameAt({ ...track, segments: [] }, 0)).toBeNull();
+  });
+});
+
+describe("segmentAt", () => {
+  it("returns the segment covering ms", () => {
+    expect(segmentAt(track, 500)?.emotion).toBe("happy");
+    expect(segmentAt(track, 1200)?.emotion).toBe("excited");
+  });
+  it("holds the last segment past the end", () => {
+    expect(segmentAt(track, 99999)?.emotion).toBe("excited");
+  });
+  it("returns null on an empty track", () => {
+    expect(segmentAt({ ...track, segments: [] }, 0)).toBeNull();
   });
 });
 
