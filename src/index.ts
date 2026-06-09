@@ -45,4 +45,10 @@ export {
 export type { VoiceSynthesizer } from "./modules/voice-synthesizer/index.js";
 export type { MascotSequencer } from "./modules/mascot-sequencer/index.js";
 export type { VideoComposer } from "./modules/video-composer/index.js";
-export type { Publisher } from "./modules/publisher/index.js";
+export type {
+  PublishTarget,
+  PublishResultItem,
+  PublishResult,
+  Publisher,
+} from "./modules/publisher/index.js";
+export { MockPublisher, allPublished } from "./modules/publisher/index.js";

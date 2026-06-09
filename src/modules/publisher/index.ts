@@ -1,8 +1,7 @@
-// TODO: slice 9
-export interface Publisher {
-  publish(
-    videoPath: string,
-    caption: string,
-    targets: string[],
-  ): Promise<Array<{ platform: string; ok: boolean; error?: string }>>;
-}
+export type {
+  PublishTarget,
+  PublishResultItem,
+  PublishResult,
+  Publisher,
+} from "./publisher.js";
+export { MockPublisher, allPublished } from "./publisher.js";
