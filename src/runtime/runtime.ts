@@ -224,6 +224,10 @@ export class Runtime {
       case "PublishPost": {
         const sp = job.scriptPackage;
         if (!sp || !job.mediaPath) return;
+        await this.deps.gateway.notify(
+          job,
+          `📤 Uploading & posting to ${this.deps.publishTargets.join(", ")}…`,
+        );
         try {
           const results = await this.deps.publisher.publish(
             job.mediaPath,
