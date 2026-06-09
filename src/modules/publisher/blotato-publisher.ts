@@ -107,9 +107,11 @@ export class BlotatoPublisher implements Publisher {
     if (this.publicBaseUrl) {
       return `${this.publicBaseUrl.replace(/\/$/, "")}/media/${basename(videoPath)}`;
     }
-    // upload the local file to Blotato's media endpoint
+    // No public URL: upload the local file to Blotato as a base64 data URI.
+    // (/v2/media accepts { url } as a public URL OR a base64 data URI; validated live.)
     const buf = await readFile(videoPath);
-    const res = (await this.fetchJson("/v2/media", buf, "application/octet-stream")) as {
+    const dataUri = `data:video/mp4;base64,${buf.toString("base64")}`;
+    const res = (await this.fetchJson("/v2/media", JSON.stringify({ url: dataUri }))) as {
       url: string;
     };
     return res.url;
