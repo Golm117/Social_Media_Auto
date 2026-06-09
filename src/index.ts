@@ -52,3 +52,11 @@ export type {
   Publisher,
 } from "./modules/publisher/index.js";
 export { MockPublisher, allPublished } from "./modules/publisher/index.js";
+export type { SchedulerConfig, Scheduler } from "./modules/scheduler/index.js";
+export { DefaultScheduler } from "./modules/scheduler/index.js";
+export type {
+  RevisionStage,
+  RevisionClassification,
+  RevisionClassifier,
+} from "./modules/revision/index.js";
+export { DefaultRevisionClassifier } from "./modules/revision/index.js";
