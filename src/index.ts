@@ -69,7 +69,25 @@ export {
   buildSegments,
   DefaultMascotSequencer,
 } from "./modules/mascot-sequencer/index.js";
-export type { VideoComposer } from "./modules/video-composer/index.js";
+export type {
+  VideoComposer,
+  ComposeInput,
+  CoddyVideoProps,
+  CoddyMascotTrack,
+  CoddyMascotSegment,
+  CoddyAtlasFrame,
+  CoddyWordTiming,
+  HighlightedToken,
+  HighlightedLine,
+} from "./modules/video-composer/index.js";
+export {
+  DefaultVideoComposer,
+  computeDurationMs,
+  frameAt,
+  activeWordIndex,
+  activeStepIndex,
+  VIDEO_FPS,
+} from "./modules/video-composer/index.js";
 export type {
   PublishTarget,
   PublishResultItem,
