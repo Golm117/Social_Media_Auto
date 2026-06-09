@@ -10,7 +10,12 @@ export type { JobStore } from "./modules/job-store/job-store.js";
 export { SqliteJobStore } from "./modules/job-store/job-store.js";
 
 export type { ConversationGateway } from "./modules/conversation-gateway/index.js";
-export type { JobOrchestrator } from "./modules/job-orchestrator/index.js";
+export type { JobEvent, Intent, JobOrchestrator } from "./modules/job-orchestrator/index.js";
+export {
+  advance,
+  DefaultJobOrchestrator,
+  IllegalTransitionError,
+} from "./modules/job-orchestrator/index.js";
 export type { ContentGenerator } from "./modules/content-generator/index.js";
 export type { CodeVerifier, VerificationResult } from "./modules/code-verifier/index.js";
 export type { VoiceSynthesizer } from "./modules/voice-synthesizer/index.js";
