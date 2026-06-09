@@ -132,6 +132,16 @@ describe("Runtime", () => {
     expect(store.get(id)?.state).toBe("rejected");
   });
 
+  it("ignores a duplicate/stale action without throwing", async () => {
+    const { runtime, store } = makeRuntime();
+    const id = await runtime.submitQuestion("q");
+    await runtime.handleAction("approve", id); // review -> approved
+    // second approve on an already-approved job must be a no-op, not an IllegalTransition
+    await expect(runtime.handleAction("approve", id)).resolves.toBeUndefined();
+    await expect(runtime.handleAction("reject", id)).resolves.toBeUndefined();
+    expect(store.get(id)?.state).toBe("approved");
+  });
+
   it("tick publishes due approved jobs", async () => {
     const { runtime, store, publisher } = makeRuntime();
     const id = await runtime.submitQuestion("q");

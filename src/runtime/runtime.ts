@@ -76,41 +76,49 @@ export class Runtime {
     return job.id;
   }
 
+  // State-aware + idempotent: a stale/duplicate button tap is ignored rather than
+  // dispatching an illegal event (which would otherwise throw).
   async handleAction(action: OperatorAction, jobId: JobId, payload?: string): Promise<void> {
+    const job = this.deps.store.get(jobId);
+    if (!job) return;
     switch (action) {
       case "approve": {
-        const job = this.deps.store.get(jobId);
-        if (job) {
-          const pending = this.deps.store
-            .listByState("approved")
-            .filter((j) => j.scheduledFor)
-            .map((j) => new Date(j.scheduledFor as string));
-          const slot = this.deps.scheduler.assignSlot(
-            pending,
-            this.deps.now(),
-            this.deps.schedulerConfig,
-          );
-          this.deps.store.save({ ...job, scheduledFor: slot.toISOString() });
-        }
+        if (job.state !== "review") return;
+        const pending = this.deps.store
+          .listByState("approved")
+          .filter((j) => j.scheduledFor)
+          .map((j) => new Date(j.scheduledFor as string));
+        const slot = this.deps.scheduler.assignSlot(
+          pending,
+          this.deps.now(),
+          this.deps.schedulerConfig,
+        );
+        this.deps.store.save({ ...job, scheduledFor: slot.toISOString() });
         await this.dispatch(jobId, { type: "Approved" });
         return;
       }
       case "postNow": {
-        const job = this.deps.store.get(jobId);
-        if (job) this.deps.store.save({ ...job, scheduledFor: this.deps.now().toISOString() });
-        await this.dispatch(jobId, { type: "Approved" });
-        await this.dispatch(jobId, { type: "PublishRequested" });
+        if (job.state === "review") {
+          this.deps.store.save({ ...job, scheduledFor: this.deps.now().toISOString() });
+          await this.dispatch(jobId, { type: "Approved" });
+          await this.dispatch(jobId, { type: "PublishRequested" });
+        } else if (job.state === "approved") {
+          // already approved (e.g. scheduled) — just publish now
+          await this.dispatch(jobId, { type: "PublishRequested" });
+        }
         return;
       }
       case "revise": {
-        const job = this.deps.store.get(jobId);
-        if (job) this.deps.store.save({ ...job, lastRevision: payload ?? "" });
+        if (job.state !== "review") return;
+        this.deps.store.save({ ...job, lastRevision: payload ?? "" });
         await this.dispatch(jobId, { type: "ReviseRequested", instructions: payload ?? "" });
         return;
       }
-      case "reject":
+      case "reject": {
+        if (job.state !== "review") return;
         await this.dispatch(jobId, { type: "Rejected" });
         return;
+      }
     }
   }
 

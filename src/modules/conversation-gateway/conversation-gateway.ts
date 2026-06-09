@@ -95,21 +95,31 @@ export class TelegramGateway implements ConversationGateway {
     });
 
     this.bot.on("callback_query:data", async (ctx) => {
-      if (!this.fromOperator(ctx.chat?.id)) {
-        await ctx.answerCallbackQuery();
-        return;
-      }
+      await ctx.answerCallbackQuery();
+      if (!this.fromOperator(ctx.chat?.id)) return;
       const [action, jobId] = ctx.callbackQuery.data.split(":");
-      if (action === "revise" && jobId) {
+      if (!jobId) return;
+      // remove the buttons so a tap can't be fired twice (prevents duplicate publish / illegal transitions)
+      await ctx.editMessageReplyMarkup().catch(() => {});
+      if (action === "revise") {
         this.pendingReviseJobId = jobId;
-        await ctx.answerCallbackQuery();
         await ctx.reply("✏️ What should I change? Send your instruction.");
         return;
       }
-      if (jobId && (action === "approve" || action === "postNow" || action === "reject")) {
+      if (action === "approve" || action === "postNow" || action === "reject") {
         await this.actionHandler(action, jobId);
       }
-      await ctx.answerCallbackQuery();
+    });
+
+    // Error boundary — a handler error must never crash the bot process.
+    this.bot.catch((err) => {
+      console.error("bot handler error:", err.error ?? err);
+      this.bot.api
+        .sendMessage(
+          this.operatorChatId,
+          "⚠️ Something went wrong handling that — please try again.",
+        )
+        .catch(() => {});
     });
   }
 }
