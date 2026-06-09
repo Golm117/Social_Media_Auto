@@ -16,7 +16,17 @@ export {
   DefaultJobOrchestrator,
   IllegalTransitionError,
 } from "./modules/job-orchestrator/index.js";
-export type { ContentGenerator } from "./modules/content-generator/index.js";
+export type {
+  ContentGenerator,
+  ModelClient,
+  ModelRole,
+  RoutingConfig,
+} from "./modules/content-generator/index.js";
+export {
+  DEFAULT_ROUTING,
+  DefaultContentGenerator,
+  OpenRouterModelClient,
+} from "./modules/content-generator/index.js";
 export type { CodeVerifier, VerificationResult } from "./modules/code-verifier/index.js";
 export type { VoiceSynthesizer } from "./modules/voice-synthesizer/index.js";
 export type { MascotSequencer } from "./modules/mascot-sequencer/index.js";

@@ -1,6 +1,11 @@
-import type { ScriptPackage } from "../../domain/script-package.js";
-
-// TODO: slice 4
-export interface ContentGenerator {
-  generate(question: string): Promise<ScriptPackage>;
-}
+export type {
+  ContentGenerator,
+  ModelClient,
+  ModelRole,
+  RoutingConfig,
+} from "./content-generator.js";
+export {
+  DEFAULT_ROUTING,
+  DefaultContentGenerator,
+  OpenRouterModelClient,
+} from "./content-generator.js";
