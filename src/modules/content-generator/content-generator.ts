@@ -71,7 +71,8 @@ const OutlineSchema = z.object({
     z.object({
       text: z.string(),
       needsCode: z.boolean(),
-      language: CodeLanguageSchema.optional(),
+      // nullable (not optional): OpenAI strict structured output requires every key present
+      language: CodeLanguageSchema.nullable(),
     }),
   ),
 });
@@ -94,7 +95,7 @@ const CopyStageOutputSchema = z.object({
   hashtags: z.array(z.string()),
   coverSpec: z.object({
     title: z.string(),
-    subtitle: z.string().optional(),
+    subtitle: z.string().nullable(),
   }),
   mascotCues: z.array(
     z.object({
@@ -174,7 +175,7 @@ Return snippets array with: stepIndex (the original step index), code (the snipp
     const templateId: TemplateId = outline.templateId;
     const stepSummary = outline.steps.map((s, i) => `Step ${i}: ${s.text}`).join("\n");
 
-    const prompt = `You are writing copy for "Quirk", an enthusiastic, clear, and encouraging retro-pixel-robot coding buddy. Clarity beats jokes; never snarky.
+    const prompt = `You are writing copy for "Coddy", an enthusiastic, clear, and encouraging retro-pixel-robot coding buddy (the mascot of the CodeWithQuirk channel). Clarity beats jokes; never snarky.
 
 Original question: ${question}
 Template: ${templateId}
@@ -219,6 +220,10 @@ Write:
       return { text: step.text };
     });
 
+    const coverSpec = copy.coverSpec.subtitle
+      ? { title: copy.coverSpec.title, subtitle: copy.coverSpec.subtitle }
+      : { title: copy.coverSpec.title };
+
     return ScriptPackageSchema.parse({
       templateId: outline.templateId,
       hook: copy.hook,
@@ -227,7 +232,7 @@ Write:
       captionsText: copy.captionsText,
       socialCaption: copy.socialCaption,
       hashtags: copy.hashtags,
-      coverSpec: copy.coverSpec,
+      coverSpec,
       mascotCues: copy.mascotCues,
     });
   }
