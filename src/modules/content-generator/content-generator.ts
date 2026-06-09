@@ -192,7 +192,7 @@ ${stepSummary}
 
 Write:
 - hook: A punchy 1-sentence opening that grabs attention
-- voiceoverText: Full voiceover script (spoken, friendly, ~60–90 words)
+- voiceoverText: Full voiceover script (spoken, friendly, ~60–90 words). CRITICAL — this is read aloud by a text-to-speech voice, so it MUST be plain spoken English with NO code and NO symbols. NEVER read a code line aloud and never include characters like = < > { } ( ) ; ++ && ?. => or a dotted path. Describe code in words instead: say "increment i by one" (not "i++"), "i is less than five" (not "i < 5"), "use optional chaining" (not "?."), "curly braces" (not "{}"), "the user dot profile property" (not "user.profile"). The code is shown on screen — the voiceover just explains it conversationally
 - captionsText: Condensed captions version (~30 words)
 - socialCaption: Instagram/Facebook caption with emoji (~25 words)
 - hashtags: 5–8 relevant hashtags (no # prefix)
