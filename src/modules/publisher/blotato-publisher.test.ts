@@ -17,6 +17,21 @@ describe("composeCaption", () => {
   it("adds #CodeWithQuirk when the model omitted it", () => {
     expect(composeCaption("x", ["coding"])).toContain("#CodeWithQuirk");
   });
+
+  it("caps Instagram at 5 hashtags total (Blotato 422s above that)", () => {
+    const many = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+    const out = composeCaption("No inline tags here.", many, { platform: "instagram" });
+    expect(out.match(/#\w+/g)?.length).toBe(5);
+    expect(out).toContain("#CodeWithQuirk"); // brand tag survives the cap
+  });
+
+  it("counts hashtags inside the caption body toward the platform limit", () => {
+    const out = composeCaption("Loops in #js and #webdev rock! 🔥", ["a", "b", "c", "d", "e"], {
+      platform: "instagram",
+    });
+    // 2 in the body + 3 appended (brand + 2) = 5 total
+    expect(out.match(/#\w+/g)?.length).toBe(5);
+  });
 });
 
 afterEach(() => vi.unstubAllGlobals());

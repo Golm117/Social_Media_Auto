@@ -73,7 +73,8 @@ const BRAND_TAG = "CodeWithQuirk";
 
 // Per-platform style: hashtag count + whether to trim the caption to a punchy first line.
 const PLATFORM_STYLE: Record<PublishTarget, { maxTags: number; punchy: boolean }> = {
-  instagram: { maxTags: 8, punchy: false },
+  // HARD limit: Blotato rejects Instagram posts with >5 hashtags (422, validated live)
+  instagram: { maxTags: 5, punchy: false },
   facebook: { maxTags: 3, punchy: false }, // FB: hashtags add little, keep it light
   tiktok: { maxTags: 4, punchy: true }, // TikTok: short & punchy, few tags
 };
@@ -93,7 +94,7 @@ export function composeCaption(
   opts: CaptionOptions = {},
 ): string {
   const brandHandle = opts.brandHandle ?? "@CodeWithQuirk";
-  const style = (opts.platform && PLATFORM_STYLE[opts.platform]) || { maxTags: 8, punchy: false };
+  const style = (opts.platform && PLATFORM_STYLE[opts.platform]) || { maxTags: 5, punchy: false };
 
   let body = socialCaption.trim();
   if (style.punchy) {
@@ -101,15 +102,19 @@ export function composeCaption(
     body = body.split(/(?<=[.!?])\s+/)[0] ?? body;
   }
 
+  // hashtags the model wrote INSIDE the caption text count toward the platform limit
+  const inBody = (body.match(/#\w/g) ?? []).length;
+  const budget = Math.max(0, style.maxTags - inBody);
+
   const seen = new Set<string>();
   const tags: string[] = [];
   for (const raw of [BRAND_TAG, ...hashtags]) {
+    if (tags.length >= budget) break;
     const h = raw.replace(/^#/, "").replace(/\s+/g, "");
     const key = h.toLowerCase();
     if (!h || seen.has(key)) continue;
     seen.add(key);
     tags.push(`#${h}`);
-    if (tags.length >= style.maxTags) break;
   }
 
   const cta = `💻 Follow ${brandHandle} for daily dev tips!`;
