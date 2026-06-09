@@ -27,6 +27,7 @@
     "@openrouter/ai-sdk-provider": "^2.9.0",
     "ai": "^6.0.198",
     "better-sqlite3": "^11.5.0",
+    "e2b": "^2.28.0",
     "zod": "^3.23.8"
   }
 }

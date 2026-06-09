@@ -1,11 +1,10 @@
-// TODO: slice 5
-export type VerificationResult = Array<{
-  snippetIndex: number;
-  ok: boolean;
-  stdout: string;
-  stderr: string;
-}>;
-
-export interface CodeVerifier {
-  verify(snippets: Array<{ code: string; language: string }>): Promise<VerificationResult>;
-}
+export type {
+  CodeLanguage,
+  SandboxRunResult,
+  Sandbox,
+  Snippet,
+  VerificationResultItem,
+  VerificationResult,
+  CodeVerifier,
+} from "./code-verifier.js";
+export { DefaultCodeVerifier, E2BSandbox, allPassed, failureSummaries } from "./code-verifier.js";
