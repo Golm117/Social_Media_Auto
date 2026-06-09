@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import type { PublishTarget } from "./modules/publisher/index.js";
 
 function parseEnvFile(path: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -31,6 +32,9 @@ export interface AppConfig {
   blotatoApiKey: string;
   blotatoInstagramId: string;
   blotatoFacebookId: string;
+  blotatoFacebookPageId: string;
+  blotatoTiktokId: string;
+  publishTargets: PublishTarget[];
   publicBaseUrl: string;
   databasePath: string;
   outputDir: string;
@@ -58,6 +62,12 @@ export function loadConfig(envPath = ".env"): AppConfig {
     blotatoApiKey: e.BLOTATO_API_KEY ?? "",
     blotatoInstagramId: e.BLOTATO_INSTAGRAM_ID ?? "",
     blotatoFacebookId: e.BLOTATO_FACEBOOK_ID ?? "",
+    blotatoFacebookPageId: e.BLOTATO_FACEBOOK_PAGE_ID ?? "",
+    blotatoTiktokId: e.BLOTATO_TIKTOK_ID ?? "",
+    publishTargets: (e.PUBLISH_TARGETS ?? "instagram,facebook,tiktok")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean) as PublishTarget[],
     publicBaseUrl: e.PUBLIC_BASE_URL ?? "",
     databasePath: e.DATABASE_PATH ?? "./data/coddy.db",
     outputDir: e.OUTPUT_DIR ?? "./data/media",

@@ -22,7 +22,7 @@ export interface Job {
   mediaPath?: string;
   telegramRef?: { chatId: number; messageId: number };
   publishResults?: Array<{
-    platform: "instagram" | "facebook";
+    platform: "instagram" | "facebook" | "tiktok";
     ok: boolean;
     error?: string;
   }>;

@@ -13,6 +13,10 @@ export interface BlotatoConfig {
   baseUrl?: string;
   /** Blotato account ids per platform (from the Blotato dashboard). */
   accountIds?: Partial<Record<PublishTarget, string>>;
+  /** Facebook Page id (required by Blotato for facebook targets). */
+  facebookPageId?: string;
+  /** TikTok privacy level (default PUBLIC_TO_EVERYONE). */
+  tiktokPrivacyLevel?: string;
   /** If set, the rendered MP4 is served from here instead of uploaded to Blotato. */
   publicBaseUrl?: string;
 }
@@ -21,13 +25,38 @@ export class BlotatoPublisher implements Publisher {
   private readonly apiKey: string;
   private readonly base: string;
   private readonly accountIds: Partial<Record<PublishTarget, string>>;
+  private readonly facebookPageId?: string;
+  private readonly tiktokPrivacyLevel: string;
   private readonly publicBaseUrl?: string;
 
   constructor(cfg: BlotatoConfig) {
     this.apiKey = cfg.apiKey;
     this.base = cfg.baseUrl ?? "https://backend.blotato.com";
     this.accountIds = cfg.accountIds ?? {};
+    this.tiktokPrivacyLevel = cfg.tiktokPrivacyLevel ?? "PUBLIC_TO_EVERYONE";
+    if (cfg.facebookPageId) this.facebookPageId = cfg.facebookPageId;
     if (cfg.publicBaseUrl) this.publicBaseUrl = cfg.publicBaseUrl;
+  }
+
+  /** Per-platform target object per the Blotato publish schema. */
+  private targetFor(platform: PublishTarget): Record<string, unknown> {
+    if (platform === "facebook") {
+      if (!this.facebookPageId) throw new Error("no Blotato facebookPageId configured");
+      return { targetType: "facebook", pageId: this.facebookPageId };
+    }
+    if (platform === "tiktok") {
+      return {
+        targetType: "tiktok",
+        privacyLevel: this.tiktokPrivacyLevel,
+        disabledComments: false,
+        disabledDuet: false,
+        disabledStitch: false,
+        isBrandedContent: false,
+        isYourBrand: false,
+        isAiGenerated: true, // content is AI-generated — required TikTok disclosure
+      };
+    }
+    return { targetType: "instagram" };
   }
 
   async publish(
@@ -67,7 +96,7 @@ export class BlotatoPublisher implements Publisher {
     return {
       post: {
         accountId,
-        target: { targetType: platform },
+        target: this.targetFor(platform),
         content: { platform, text, mediaUrls: [mediaUrl] },
       },
     };

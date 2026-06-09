@@ -122,7 +122,7 @@ export class DefaultContentGenerator implements ContentGenerator {
   }
 
   private reviseSuffix(revision?: string): string {
-    return revision && revision.trim()
+    return revision?.trim()
       ? `\n\nIMPORTANT — the operator requested this revision; apply it: "${revision.trim()}"`
       : "";
   }

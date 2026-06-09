@@ -45,8 +45,13 @@ async function main() {
     const { BlotatoPublisher } = await import("./modules/publisher/blotato-publisher.js");
     const blotatoCfg: ConstructorParameters<typeof BlotatoPublisher>[0] = {
       apiKey: cfg.blotatoApiKey,
-      accountIds: { instagram: cfg.blotatoInstagramId, facebook: cfg.blotatoFacebookId },
+      accountIds: {
+        instagram: cfg.blotatoInstagramId,
+        facebook: cfg.blotatoFacebookId,
+        tiktok: cfg.blotatoTiktokId,
+      },
     };
+    if (cfg.blotatoFacebookPageId) blotatoCfg.facebookPageId = cfg.blotatoFacebookPageId;
     if (cfg.publicBaseUrl) blotatoCfg.publicBaseUrl = cfg.publicBaseUrl;
     publisher = new BlotatoPublisher(blotatoCfg);
     console.log("🚀 Using LIVE Blotato publisher.");
@@ -65,7 +70,7 @@ async function main() {
     schedulerConfig: { slots: cfg.scheduleSlots, timeZone: cfg.scheduleTimeZone },
     outputDir: cfg.outputDir,
     mascotSheetPath: cfg.mascotSheetPath,
-    publishTargets: ["instagram", "facebook"],
+    publishTargets: cfg.publishTargets,
     now: () => new Date(),
   });
 

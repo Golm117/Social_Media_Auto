@@ -2,7 +2,7 @@
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export type PublishTarget = "instagram" | "facebook";
+export type PublishTarget = "instagram" | "facebook" | "tiktok";
 
 export interface PublishResultItem {
   platform: PublishTarget;

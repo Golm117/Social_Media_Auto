@@ -15,11 +15,19 @@ export type JobEvent =
   | { type: "PublishRequested" }
   | {
       type: "Published";
-      results: Array<{ platform: "instagram" | "facebook"; ok: boolean; error?: string }>;
+      results: Array<{
+        platform: "instagram" | "facebook" | "tiktok";
+        ok: boolean;
+        error?: string;
+      }>;
     }
   | {
       type: "PublishFailed";
-      results: Array<{ platform: "instagram" | "facebook"; ok: boolean; error?: string }>;
+      results: Array<{
+        platform: "instagram" | "facebook" | "tiktok";
+        ok: boolean;
+        error?: string;
+      }>;
     }
   | { type: "StageFailed"; stage: JobState; error: string };
 
