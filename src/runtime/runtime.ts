@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import type { Job, JobId } from "../domain/job.js";
+import type { Job, JobId, JobState } from "../domain/job.js";
 import { type CodeVerifier, allPassed, failureSummaries } from "../modules/code-verifier/index.js";
 import type { ContentGenerator } from "../modules/content-generator/index.js";
 import type { ConversationGateway, OperatorAction } from "../modules/conversation-gateway/index.js";
@@ -46,17 +46,19 @@ function notifyText(intent: Extract<Intent, { type: "NotifyOperator" }>): string
     case "rendering":
       return "🎬 Rendering Coddy's video…";
     case "verification_failed":
-      return `⚠️ The code didn't run cleanly:\n${intent.detail ?? ""}\n\nReply with a fix, or tap ❌ Reject.`;
+      return `⚠️ The code didn't run cleanly:\n${intent.detail ?? ""}\n\nTap ✏️ Revise to send a fix, or ❌ Reject.`;
     case "posted":
-      return "📲 Posted to Instagram + Facebook! ✓";
+      return `📲 Posted to ${intent.detail || "your platforms"}! ✓`;
     case "publish_failed":
-      return `❌ Publish failed: ${intent.detail ?? ""}\nTap ✅ again to retry.`;
+      return `❌ Publish failed: ${intent.detail ?? ""}\nTap ⚡ Post now to retry (already-posted platforms are skipped), or ❌ Reject.`;
     default:
       return `💥 Something went wrong: ${intent.detail ?? "unknown error"}`;
   }
 }
 
 export class Runtime {
+  private ticking = false;
+
   constructor(private readonly deps: RuntimeDeps) {}
 
   /** Wire gateway handlers + the scheduler tick. */
@@ -122,7 +124,8 @@ export class Runtime {
         return;
       }
       case "reject": {
-        if (job.state !== "review") return;
+        // also legal from "approved", to give up on a job that keeps failing to publish
+        if (job.state !== "review" && job.state !== "approved") return;
         await this.dispatch(jobId, { type: "Rejected" });
         return;
       }
@@ -131,13 +134,44 @@ export class Runtime {
 
   /** Scheduler tick: publish any approved jobs that are due. */
   async tick(): Promise<void> {
-    const due = this.deps.scheduler.dueJobs(
-      this.deps.store.listByState("approved"),
-      this.deps.now(),
-    );
-    for (const job of due) {
-      await this.dispatch(job.id, { type: "PublishRequested" });
+    if (this.ticking) return; // a slow publish must not overlap the next tick
+    this.ticking = true;
+    try {
+      const due = this.deps.scheduler.dueJobs(
+        this.deps.store.listByState("approved"),
+        this.deps.now(),
+      );
+      for (const job of due) {
+        await this.dispatch(job.id, { type: "PublishRequested" });
+      }
+    } finally {
+      this.ticking = false;
     }
+  }
+
+  /**
+   * Re-route jobs a previous process left in-flight (crash/restart mid-pipeline).
+   * Publishing jobs fall back to "approved" with a retry prompt; earlier stages fail
+   * with a notify so the operator knows to re-ask.
+   */
+  async recover(): Promise<void> {
+    const inFlight: JobState[] = ["generating", "verifying", "rendering", "revising", "publishing"];
+    for (const state of inFlight) {
+      for (const job of this.deps.store.listByState(state)) {
+        await this.dispatch(job.id, {
+          type: "StageFailed",
+          stage: state,
+          error: "interrupted by a restart",
+        });
+      }
+    }
+  }
+
+  // Drop scheduledFor so the tick does NOT auto-retry a failed publish every minute —
+  // retrying is the operator's call (⚡ Post now on the failure prompt).
+  private static clearSchedule(job: Job): Job {
+    const { scheduledFor: _, ...rest } = job;
+    return rest;
   }
 
   private applyEventData(job: Job, event: JobEvent): Job {
@@ -147,8 +181,11 @@ export class Runtime {
       case "RenderCompleted":
         return { ...job, mediaPath: event.mediaPath };
       case "Published":
-      case "PublishFailed":
         return { ...job, publishResults: event.results };
+      case "PublishFailed":
+        return Runtime.clearSchedule({ ...job, publishResults: event.results });
+      case "StageFailed":
+        return event.stage === "publishing" ? Runtime.clearSchedule(job) : job;
       default:
         return job;
     }
@@ -172,9 +209,18 @@ export class Runtime {
       this.dispatch(job.id, { type: "StageFailed", stage, error: String(err) });
 
     switch (intent.type) {
-      case "NotifyOperator":
-        await this.deps.gateway.notify(job, notifyText(intent));
+      case "NotifyOperator": {
+        // failure notices carry the buttons the operator needs to act on them
+        const text = notifyText(intent);
+        if (intent.kind === "verification_failed") {
+          await this.deps.gateway.sendActionPrompt(job, text, ["revise", "reject"]);
+        } else if (intent.kind === "publish_failed") {
+          await this.deps.gateway.sendActionPrompt(job, text, ["postNow", "reject"]);
+        } else {
+          await this.deps.gateway.notify(job, text);
+        }
         return;
+      }
       case "GenerateContent":
         try {
           const scriptPackage = await this.deps.contentGenerator.generate(
@@ -231,28 +277,34 @@ export class Runtime {
       case "PublishPost": {
         const sp = job.scriptPackage;
         if (!sp || !job.mediaPath) return;
-        await this.deps.gateway.notify(
-          job,
-          `📤 Uploading & posting to ${this.deps.publishTargets.join(", ")}…`,
-        );
+        // on retry, skip platforms that already succeeded — no duplicate posts
+        const prior = job.publishResults ?? [];
+        const done = new Set(prior.filter((r) => r.ok).map((r) => r.platform));
+        const targets = this.deps.publishTargets.filter((t) => !done.has(t));
+        if (targets.length === 0) {
+          await this.dispatch(job.id, { type: "Published", results: prior });
+          return;
+        }
         try {
+          await this.deps.gateway.notify(job, `📤 Uploading & posting to ${targets.join(", ")}…`);
           // tailor a caption per platform (IG fuller, FB lighter, TikTok punchy)
           const captions: PostCaptions = {};
-          for (const p of this.deps.publishTargets) {
+          for (const p of targets) {
             captions[p] = composeCaption(sp.socialCaption, sp.hashtags, {
               brandHandle: this.deps.brandHandle,
               platform: p,
             });
           }
-          const results = await this.deps.publisher.publish(
-            job.mediaPath,
-            captions,
-            this.deps.publishTargets,
-          );
+          const fresh = await this.deps.publisher.publish(job.mediaPath, captions, targets);
+          // merge earlier successes back in so the final record covers every platform
+          const results = [
+            ...prior.filter((r) => r.ok && !fresh.some((f) => f.platform === r.platform)),
+            ...fresh,
+          ];
           if (allPublished(results)) await this.dispatch(job.id, { type: "Published", results });
           else await this.dispatch(job.id, { type: "PublishFailed", results });
         } catch (e) {
-          await fail("approved", e);
+          await fail("publishing", e);
         }
         return;
       }

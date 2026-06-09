@@ -6,11 +6,18 @@ import type { ContentGenerator } from "../modules/content-generator/index.js";
 import type {
   ActionHandler,
   ConversationGateway,
+  OperatorAction,
   QuestionHandler,
 } from "../modules/conversation-gateway/index.js";
 import { SqliteJobStore } from "../modules/job-store/job-store.js";
 import type { MascotSequencer } from "../modules/mascot-sequencer/index.js";
-import { MockPublisher } from "../modules/publisher/index.js";
+import {
+  MockPublisher,
+  type PostCaptions,
+  type PublishResult,
+  type PublishTarget,
+  type Publisher,
+} from "../modules/publisher/index.js";
 import { DefaultScheduler, type SchedulerConfig } from "../modules/scheduler/index.js";
 import type { VideoComposer } from "../modules/video-composer/index.js";
 import type { VoiceSynthesizer } from "../modules/voice-synthesizer/index.js";
@@ -35,6 +42,7 @@ function makeScript(withCode = true): ScriptPackage {
 class RecordingGateway implements ConversationGateway {
   notifications: string[] = [];
   drafts: string[] = [];
+  prompts: Array<{ jobId: string; message: string; actions: OperatorAction[] }> = [];
   qh: QuestionHandler = () => {};
   ah: ActionHandler = () => {};
   onQuestion(h: QuestionHandler) {
@@ -49,15 +57,18 @@ class RecordingGateway implements ConversationGateway {
   async sendDraftForApproval(job: Job) {
     this.drafts.push(job.id);
   }
+  async sendActionPrompt(job: Job, message: string, actions: OperatorAction[]) {
+    this.prompts.push({ jobId: job.id, message, actions });
+  }
 }
 
-function makeRuntime(overrides?: {
+function makeRuntime<P extends Publisher = MockPublisher>(overrides?: {
   verifier?: CodeVerifier;
-  publisher?: MockPublisher;
+  publisher?: P;
 }) {
   const store = new SqliteJobStore(":memory:");
   const gateway = new RecordingGateway();
-  const publisher = overrides?.publisher ?? new MockPublisher();
+  const publisher = (overrides?.publisher ?? new MockPublisher()) as P;
   const contentGenerator: ContentGenerator = { generate: async () => makeScript() };
   const codeVerifier: CodeVerifier =
     overrides?.verifier ??
@@ -113,7 +124,7 @@ describe("Runtime", () => {
     expect(publisher.calls[0]?.targets).toEqual(["instagram", "facebook"]);
   });
 
-  it("routes failed code verification to review (no media) with a warning", async () => {
+  it("routes failed code verification to review (no media) with a revise/reject prompt", async () => {
     const verifier: CodeVerifier = {
       verify: async (s) =>
         s.map((_, i) => ({ snippetIndex: i, ok: false, stdout: "", stderr: "boom" })),
@@ -122,7 +133,10 @@ describe("Runtime", () => {
     const id = await runtime.submitQuestion("q");
     expect(store.get(id)?.state).toBe("review");
     expect(store.get(id)?.mediaPath).toBeUndefined();
-    expect(gateway.notifications.some((n) => n.includes("didn't run cleanly"))).toBe(true);
+    // the warning arrives WITH buttons — a plain text reply would start a new job
+    const prompt = gateway.prompts.find((p) => p.jobId === id);
+    expect(prompt?.message).toContain("didn't run cleanly");
+    expect(prompt?.actions).toEqual(["revise", "reject"]);
     expect(gateway.drafts).toHaveLength(0);
   });
 
@@ -137,10 +151,19 @@ describe("Runtime", () => {
     const { runtime, store } = makeRuntime();
     const id = await runtime.submitQuestion("q");
     await runtime.handleAction("approve", id); // review -> approved
-    // second approve on an already-approved job must be a no-op, not an IllegalTransition
+    // duplicate approve / stale revise on an already-approved job must be a no-op,
+    // not an IllegalTransition
     await expect(runtime.handleAction("approve", id)).resolves.toBeUndefined();
-    await expect(runtime.handleAction("reject", id)).resolves.toBeUndefined();
+    await expect(runtime.handleAction("revise", id, "tweak")).resolves.toBeUndefined();
     expect(store.get(id)?.state).toBe("approved");
+  });
+
+  it("reject from approved gives up on the job", async () => {
+    const { runtime, store } = makeRuntime();
+    const id = await runtime.submitQuestion("q");
+    await runtime.handleAction("approve", id);
+    await runtime.handleAction("reject", id);
+    expect(store.get(id)?.state).toBe("rejected");
   });
 
   it("tick publishes due approved jobs", async () => {
@@ -153,5 +176,128 @@ describe("Runtime", () => {
     await runtime.tick();
     expect(store.get(id)?.state).toBe("posted");
     expect(publisher.calls).toHaveLength(1);
+  });
+});
+
+/** Fails the given platforms on the FIRST publish call, succeeds afterwards. */
+class FlakyPublisher implements Publisher {
+  calls: Array<{ targets: PublishTarget[]; captions: PostCaptions }> = [];
+  constructor(private readonly failFirst: PublishTarget[]) {}
+  async publish(_v: string, captions: PostCaptions, targets: PublishTarget[]) {
+    this.calls.push({ targets, captions });
+    const failing = new Set(this.calls.length === 1 ? this.failFirst : []);
+    return targets.map((platform) =>
+      failing.has(platform)
+        ? { platform, ok: false as const, error: "rate limited" }
+        : { platform, ok: true as const },
+    );
+  }
+}
+
+describe("Runtime — publish failure handling", () => {
+  it("a failed publish stops auto-retrying; a manual retry skips already-posted platforms", async () => {
+    const publisher = new FlakyPublisher(["facebook"]);
+    const { runtime, store, gateway } = makeRuntime({ publisher });
+    const id = await runtime.submitQuestion("q");
+    await runtime.handleAction("postNow", id);
+
+    // partial failure → back to approved, schedule cleared so the tick won't loop
+    expect(store.get(id)?.state).toBe("approved");
+    expect(store.get(id)?.scheduledFor).toBeUndefined();
+    const prompt = gateway.prompts.find(
+      (p) => p.jobId === id && p.message.includes("Publish failed"),
+    );
+    expect(prompt?.actions).toEqual(["postNow", "reject"]);
+
+    await runtime.tick();
+    expect(publisher.calls).toHaveLength(1); // no auto-retry on tick
+
+    // operator retries: ONLY the failed platform is attempted (no instagram duplicate)
+    await runtime.handleAction("postNow", id);
+    expect(publisher.calls).toHaveLength(2);
+    expect(publisher.calls[1]?.targets).toEqual(["facebook"]);
+
+    const job = store.get(id);
+    expect(job?.state).toBe("posted");
+    // the merged record covers every platform
+    const okPlatforms = job?.publishResults?.filter((r) => r.ok).map((r) => r.platform) ?? [];
+    expect(okPlatforms.sort()).toEqual(["facebook", "instagram"]);
+  });
+
+  it("a tick during a slow in-flight publish does not double-post", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let publishCalls = 0;
+    const publisher: Publisher = {
+      publish: async (_v, _c, targets): Promise<PublishResult> => {
+        publishCalls++;
+        await gate;
+        return targets.map((platform) => ({ platform, ok: true }));
+      },
+    };
+    const { runtime, store } = makeRuntime({ publisher });
+    const id = await runtime.submitQuestion("q");
+    await runtime.handleAction("approve", id);
+    const job = store.get(id);
+    if (job) store.save({ ...job, scheduledFor: "2026-06-09T00:00:00Z" });
+
+    const inFlight = runtime.handleAction("postNow", id); // blocks inside publish
+    expect(store.get(id)?.state).toBe("publishing"); // invisible to the scheduler
+    await runtime.tick(); // a tick mid-publish must not pick the job up again
+    release();
+    await inFlight;
+
+    expect(publishCalls).toBe(1);
+    expect(store.get(id)?.state).toBe("posted");
+  });
+
+  it("a publisher exception falls back to approved with a retry prompt (no crash)", async () => {
+    const publisher: Publisher = {
+      publish: async () => {
+        throw new Error("ECONNRESET");
+      },
+    };
+    const { runtime, store, gateway } = makeRuntime({ publisher });
+    const id = await runtime.submitQuestion("q");
+    await expect(runtime.handleAction("postNow", id)).resolves.toBeUndefined();
+    expect(store.get(id)?.state).toBe("approved");
+    expect(store.get(id)?.scheduledFor).toBeUndefined();
+    const prompt = gateway.prompts.find((p) => p.message.includes("Publish failed"));
+    expect(prompt?.actions).toEqual(["postNow", "reject"]);
+  });
+});
+
+describe("Runtime — crash recovery", () => {
+  it("recover() fails jobs stuck mid-pipeline and reverts stuck publishes to approved", async () => {
+    const { runtime, store, gateway } = makeRuntime();
+    const ts = "2026-06-09T11:00:00.000Z";
+    store.save({
+      id: "stuck-render",
+      question: "q",
+      state: "rendering",
+      createdAt: ts,
+      updatedAt: ts,
+    });
+    store.save({
+      id: "stuck-publish",
+      question: "q",
+      state: "publishing",
+      scheduledFor: ts,
+      createdAt: ts,
+      updatedAt: ts,
+    });
+
+    await runtime.recover();
+
+    expect(store.get("stuck-render")?.state).toBe("failed");
+    expect(store.get("stuck-publish")?.state).toBe("approved");
+    expect(store.get("stuck-publish")?.scheduledFor).toBeUndefined();
+    // the operator hears about both, with a retry prompt for the publish
+    expect(gateway.notifications.some((n) => n.includes("Something went wrong"))).toBe(true);
+    expect(
+      gateway.prompts.some((p) => p.jobId === "stuck-publish" && p.actions.includes("postNow")),
+    ).toBe(true);
   });
 });

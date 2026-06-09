@@ -9,6 +9,7 @@ export type JobState =
   | "rendering"
   | "review"
   | "approved"
+  | "publishing"
   | "posted"
   | "revising"
   | "rejected"

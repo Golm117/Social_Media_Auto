@@ -191,15 +191,32 @@ export function advance(job: Job, event: JobEvent): { state: JobState; intents: 
 
     case "approved": {
       if (event.type === "PublishRequested") {
+        // "publishing" hides the job from the scheduler tick while the (slow)
+        // upload+post is in flight — a tick mid-publish must not double-post.
         return {
-          state: "approved",
+          state: "publishing",
           intents: [{ type: "PublishPost" }],
         };
       }
+      if (event.type === "Rejected") {
+        // give up on a job that keeps failing to publish
+        return {
+          state: "rejected",
+          intents: [{ type: "Cleanup" }],
+        };
+      }
+      break;
+    }
+
+    case "publishing": {
       if (event.type === "Published") {
+        const detail = event.results
+          .filter((r) => r.ok)
+          .map((r) => r.platform)
+          .join(" + ");
         return {
           state: "posted",
-          intents: [{ type: "NotifyOperator", kind: "posted" }, { type: "Cleanup" }],
+          intents: [{ type: "NotifyOperator", kind: "posted", detail }, { type: "Cleanup" }],
         };
       }
       if (event.type === "PublishFailed") {
@@ -210,6 +227,13 @@ export function advance(job: Job, event: JobEvent): { state: JobState; intents: 
         return {
           state: "approved",
           intents: [{ type: "NotifyOperator", kind: "publish_failed", detail }],
+        };
+      }
+      if (event.type === "StageFailed") {
+        // publisher threw (vs returning per-platform results) — recoverable, not terminal
+        return {
+          state: "approved",
+          intents: [{ type: "NotifyOperator", kind: "publish_failed", detail: event.error }],
         };
       }
       break;

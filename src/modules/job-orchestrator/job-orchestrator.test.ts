@@ -203,26 +203,32 @@ describe("advance — transition table", () => {
     ]);
   });
 
-  it("approved + PublishRequested → approved, [PublishPost]", () => {
+  it("approved + PublishRequested → publishing, [PublishPost]", () => {
     const result = advance(makeJob("approved"), { type: "PublishRequested" });
-    expect(result.state).toBe("approved");
+    expect(result.state).toBe("publishing");
     expect(result.intents).toEqual([{ type: "PublishPost" }]);
   });
 
-  it("approved + Published → posted, [NotifyOperator{posted}, Cleanup]", () => {
-    const result = advance(makeJob("approved"), {
+  it("approved + Rejected → rejected, [Cleanup] (give up on a failing publish)", () => {
+    const result = advance(makeJob("approved"), { type: "Rejected" });
+    expect(result.state).toBe("rejected");
+    expect(result.intents).toEqual([{ type: "Cleanup" }]);
+  });
+
+  it("publishing + Published → posted, [NotifyOperator{posted, platforms}, Cleanup]", () => {
+    const result = advance(makeJob("publishing"), {
       type: "Published",
       results: [{ platform: "instagram", ok: true }],
     });
     expect(result.state).toBe("posted");
     expect(result.intents).toEqual([
-      { type: "NotifyOperator", kind: "posted" },
+      { type: "NotifyOperator", kind: "posted", detail: "instagram" },
       { type: "Cleanup" },
     ]);
   });
 
-  it("approved + PublishFailed → approved (retryable), [NotifyOperator{publish_failed}]", () => {
-    const result = advance(makeJob("approved"), {
+  it("publishing + PublishFailed → approved (retryable), [NotifyOperator{publish_failed}]", () => {
+    const result = advance(makeJob("publishing"), {
       type: "PublishFailed",
       results: [{ platform: "facebook", ok: false, error: "rate limited" }],
     });
@@ -234,6 +240,18 @@ describe("advance — transition table", () => {
       expect(notify.kind).toBe("publish_failed");
       expect(notify.detail).toContain("facebook");
     }
+  });
+
+  it("publishing + StageFailed (publisher threw) → approved, [NotifyOperator{publish_failed}]", () => {
+    const result = advance(makeJob("publishing"), {
+      type: "StageFailed",
+      stage: "publishing",
+      error: "Telegram down",
+    });
+    expect(result.state).toBe("approved");
+    expect(result.intents).toEqual([
+      { type: "NotifyOperator", kind: "publish_failed", detail: "Telegram down" },
+    ]);
   });
 });
 
@@ -300,12 +318,12 @@ describe("advance — revise loop", () => {
 // ─── Publish path ──────────────────────────────────────────────────────────
 
 describe("advance — full publish path", () => {
-  it("approved → PublishRequested → PublishPost; then Published → posted + Cleanup", () => {
+  it("approved → PublishRequested → publishing; then Published → posted + Cleanup", () => {
     const r1 = advance(makeJob("approved"), { type: "PublishRequested" });
-    expect(r1.state).toBe("approved");
+    expect(r1.state).toBe("publishing");
     expect(r1.intents).toContainEqual({ type: "PublishPost" });
 
-    const r2 = advance(makeJob("approved"), {
+    const r2 = advance(makeJob("publishing"), {
       type: "Published",
       results: [
         { platform: "instagram", ok: true },
@@ -314,11 +332,15 @@ describe("advance — full publish path", () => {
     });
     expect(r2.state).toBe("posted");
     expect(r2.intents).toContainEqual({ type: "Cleanup" });
-    expect(r2.intents).toContainEqual({ type: "NotifyOperator", kind: "posted" });
+    expect(r2.intents).toContainEqual({
+      type: "NotifyOperator",
+      kind: "posted",
+      detail: "instagram + facebook",
+    });
   });
 
-  it("approved + PublishFailed stays approved, ready to retry", () => {
-    const result = advance(makeJob("approved"), {
+  it("publishing + PublishFailed falls back to approved, ready to retry", () => {
+    const result = advance(makeJob("publishing"), {
       type: "PublishFailed",
       results: [
         { platform: "instagram", ok: false, error: "network error" },

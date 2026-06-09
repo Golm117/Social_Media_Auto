@@ -80,10 +80,21 @@ async function main() {
   });
 
   runtime.start();
+  await runtime.recover(); // jobs left in-flight by a previous run (crash/restart)
   gateway.start();
-  setInterval(() => {
+  const ticker = setInterval(() => {
     runtime.tick().catch((e) => console.error("tick error:", e));
   }, TICK_MS);
+
+  const shutdown = async (signal: string) => {
+    console.log(`\n${signal} received — shutting down…`);
+    clearInterval(ticker);
+    await gateway.stop().catch(() => {});
+    store.close();
+    process.exit(0);
+  };
+  process.once("SIGINT", () => void shutdown("SIGINT"));
+  process.once("SIGTERM", () => void shutdown("SIGTERM"));
 
   console.log("✅ CodeWithQuirk bot running. DM the bot a coding question.");
 }

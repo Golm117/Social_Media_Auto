@@ -15,12 +15,21 @@ export interface ConversationGateway {
   onAction(handler: ActionHandler): void;
   notify(job: Job, message: string): Promise<void>;
   sendDraftForApproval(job: Job): Promise<void>;
+  /** A notify with action buttons, for messages the operator must respond to. */
+  sendActionPrompt(job: Job, message: string, actions: OperatorAction[]): Promise<void>;
 }
 
 export interface TelegramGatewayConfig {
   token: string;
   operatorChatId: number;
 }
+
+const ACTION_LABELS: Record<OperatorAction, string> = {
+  approve: "✅ Approve",
+  postNow: "⚡ Post now",
+  revise: "✏️ Revise",
+  reject: "❌ Reject",
+};
 
 export class TelegramGateway implements ConversationGateway {
   private readonly bot: Bot;
@@ -59,6 +68,12 @@ export class TelegramGateway implements ConversationGateway {
       caption,
       reply_markup: kb,
     });
+  }
+
+  async sendActionPrompt(job: Job, message: string, actions: OperatorAction[]): Promise<void> {
+    const kb = new InlineKeyboard();
+    for (const action of actions) kb.text(ACTION_LABELS[action], `${action}:${job.id}`);
+    await this.bot.api.sendMessage(this.operatorChatId, message, { reply_markup: kb });
   }
 
   start(): void {
