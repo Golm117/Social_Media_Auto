@@ -9,7 +9,13 @@ export type { ScriptPackage, MascotState, TemplateId } from "./domain/script-pac
 export type { JobStore } from "./modules/job-store/job-store.js";
 export { SqliteJobStore } from "./modules/job-store/job-store.js";
 
-export type { ConversationGateway } from "./modules/conversation-gateway/index.js";
+export type {
+  ConversationGateway,
+  OperatorAction,
+  TelegramGatewayConfig,
+} from "./modules/conversation-gateway/index.js";
+export { TelegramGateway } from "./modules/conversation-gateway/index.js";
+export { Runtime, type RuntimeDeps } from "./runtime/runtime.js";
 export type { JobEvent, Intent, JobOrchestrator } from "./modules/job-orchestrator/index.js";
 export {
   advance,

@@ -1,11 +1,19 @@
 import { readFileSync } from "node:fs";
-import { DefaultVoiceSynthesizer, ElevenLabsTtsClient } from "../src/modules/voice-synthesizer/voice-synthesizer.js";
+import {
+  DefaultVoiceSynthesizer,
+  ElevenLabsTtsClient,
+} from "../src/modules/voice-synthesizer/voice-synthesizer.js";
 
 function envVal(key: string): string {
   for (const line of readFileSync(".env", "utf8").split("\n")) {
     if (line.trimStart().startsWith("#") || !line.includes("=")) continue;
     const [k, ...rest] = line.split("=");
-    if (k.trim() === key) return rest.join("=").split(/\s+#/)[0].trim().replace(/^['"]|['"]$/g, "");
+    if (k.trim() === key)
+      return rest
+        .join("=")
+        .split(/\s+#/)[0]
+        .trim()
+        .replace(/^['"]|['"]$/g, "");
   }
   throw new Error(`missing ${key}`);
 }

@@ -36,9 +36,9 @@ export interface ContentGenerator {
 // API keys are wired (a later integration pass) — they are not network-tested
 // in this slice.
 export const DEFAULT_ROUTING: RoutingConfig = {
-  code: "anthropic/claude-3.5-sonnet",
-  copy: "openai/gpt-4o-mini",
-  glue: "google/gemini-flash-1.5",
+  code: "anthropic/claude-sonnet-4.6",
+  copy: "openai/gpt-5.5",
+  glue: "google/gemini-3.5-flash",
 };
 
 // ─── OpenRouterModelClient (real impl) ────────────────────────────────────
@@ -54,7 +54,9 @@ export class OpenRouterModelClient implements ModelClient {
 
   async generateObject<T>(role: ModelRole, prompt: string, schema: z.ZodType<T>): Promise<T> {
     const model = this.provider.chat(this.routing[role]);
-    const result = await generateObject({ model, schema, prompt });
+    // Cap output tokens — OpenRouter reserves credits for the full max_tokens, and the
+    // default (64k) is both wasteful and can exceed a low account balance.
+    const result = await generateObject({ model, schema, prompt, maxOutputTokens: 4000 });
     return result.object;
   }
 }

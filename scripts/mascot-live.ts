@@ -1,4 +1,7 @@
-import { DefaultMascotSequencer, loadAtlas } from "../src/modules/mascot-sequencer/mascot-sequencer.js";
+import {
+  DefaultMascotSequencer,
+  loadAtlas,
+} from "../src/modules/mascot-sequencer/mascot-sequencer.js";
 
 const atlas = await loadAtlas("assets/mascot/coddy-atlas.json");
 console.log("loaded atlas — emotions:", Object.keys(atlas.emotions), "fps:", atlas.defaultFps);
@@ -19,4 +22,6 @@ const { trackPath } = await seq.sequence(cues, timings);
 const track = JSON.parse(await (await import("node:fs/promises")).readFile(trackPath, "utf8"));
 console.log("trackPath:", trackPath, "| totalMs:", track.totalMs);
 for (const s of track.segments)
-  console.log(`  ${s.startMs}-${s.endMs}ms  ${s.emotion}  (${s.frames.length} frames @ ${s.fps}fps)`);
+  console.log(
+    `  ${s.startMs}-${s.endMs}ms  ${s.emotion}  (${s.frames.length} frames @ ${s.fps}fps)`,
+  );

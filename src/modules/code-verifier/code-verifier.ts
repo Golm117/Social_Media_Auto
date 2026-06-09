@@ -92,12 +92,18 @@ export class E2BSandbox implements Sandbox {
     try {
       const tmpPath = `/tmp/snippet.${FILE_EXT[language]}`;
       await sbx.files.write(tmpPath, code);
-      const result = await sbx.commands.run(RUNNER_CMD[language](tmpPath));
-      return {
-        exitCode: result.exitCode,
-        stdout: result.stdout,
-        stderr: result.stderr,
-      };
+      try {
+        const result = await sbx.commands.run(RUNNER_CMD[language](tmpPath));
+        return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr };
+      } catch (err) {
+        // E2B throws CommandExitError on non-zero exit — that's a verification
+        // FAILURE, not an adapter error. Surface it as a result.
+        const e = err as { exitCode?: number; stdout?: string; stderr?: string };
+        if (typeof e.exitCode === "number") {
+          return { exitCode: e.exitCode, stdout: e.stdout ?? "", stderr: e.stderr ?? "" };
+        }
+        throw err;
+      }
     } finally {
       await sbx.kill();
     }
