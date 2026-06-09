@@ -42,7 +42,19 @@ export {
   allPassed,
   failureSummaries,
 } from "./modules/code-verifier/index.js";
-export type { VoiceSynthesizer } from "./modules/voice-synthesizer/index.js";
+export type {
+  VoiceSynthesizer,
+  SynthesisResult,
+  WordTiming,
+  CharAlignment,
+  TtsClient,
+  ElevenLabsConfig,
+} from "./modules/voice-synthesizer/index.js";
+export {
+  charsToWordTimings,
+  ElevenLabsTtsClient,
+  DefaultVoiceSynthesizer,
+} from "./modules/voice-synthesizer/index.js";
 export type { MascotSequencer } from "./modules/mascot-sequencer/index.js";
 export type { VideoComposer } from "./modules/video-composer/index.js";
 export type {

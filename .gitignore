@@ -4,3 +4,6 @@ dist/
 *.d.ts.map
 .env
 .env.*
+!.env.example
+data/
+.DS_Store
