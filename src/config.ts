@@ -36,6 +36,7 @@ export interface AppConfig {
   blotatoFacebookPageId: string;
   blotatoTiktokId: string;
   publishTargets: PublishTarget[];
+  brandHandle: string;
   publicBaseUrl: string;
   databasePath: string;
   outputDir: string;
@@ -70,6 +71,7 @@ export function loadConfig(envPath = ".env"): AppConfig {
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean) as PublishTarget[],
+    brandHandle: e.BRAND_HANDLE ?? "@CodeWithQuirk",
     publicBaseUrl: e.PUBLIC_BASE_URL ?? "",
     databasePath: e.DATABASE_PATH ?? "./data/coddy.db",
     outputDir: e.OUTPUT_DIR ?? "./data/media",

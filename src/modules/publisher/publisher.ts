@@ -62,3 +62,27 @@ export class MockPublisher implements Publisher {
 export function allPublished(result: PublishResult): boolean {
   return result.every((item) => item.ok);
 }
+
+const BRAND_TAG = "CodeWithQuirk";
+
+/**
+ * Assemble the final post text: caption + CTA + hashtags (with `#`).
+ * Ensures the branded #CodeWithQuirk tag is present, dedupes, and normalizes `#`.
+ */
+export function composeCaption(
+  socialCaption: string,
+  hashtags: string[],
+  brandHandle = "@CodeWithQuirk",
+): string {
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const raw of [...hashtags, BRAND_TAG]) {
+    const h = raw.replace(/^#/, "").replace(/\s+/g, "");
+    const key = h.toLowerCase();
+    if (!h || seen.has(key)) continue;
+    seen.add(key);
+    tags.push(`#${h}`);
+  }
+  const cta = `💻 Follow ${brandHandle} for daily dev tips!`;
+  return [socialCaption.trim(), cta, tags.join(" ")].filter(Boolean).join("\n\n");
+}

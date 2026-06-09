@@ -8,7 +8,12 @@ import type { ConversationGateway, OperatorAction } from "../modules/conversatio
 import { type Intent, type JobEvent, advance } from "../modules/job-orchestrator/index.js";
 import type { JobStore } from "../modules/job-store/job-store.js";
 import type { MascotSequencer } from "../modules/mascot-sequencer/index.js";
-import { type PublishTarget, type Publisher, allPublished } from "../modules/publisher/index.js";
+import {
+  type PublishTarget,
+  type Publisher,
+  allPublished,
+  composeCaption,
+} from "../modules/publisher/index.js";
 import type { Scheduler, SchedulerConfig } from "../modules/scheduler/index.js";
 import type { VideoComposer } from "../modules/video-composer/index.js";
 import type { VoiceSynthesizer } from "../modules/voice-synthesizer/index.js";
@@ -27,6 +32,7 @@ export interface RuntimeDeps {
   outputDir: string;
   mascotSheetPath: string;
   publishTargets: PublishTarget[];
+  brandHandle: string;
   now: () => Date;
 }
 
@@ -229,9 +235,10 @@ export class Runtime {
           `📤 Uploading & posting to ${this.deps.publishTargets.join(", ")}…`,
         );
         try {
+          const caption = composeCaption(sp.socialCaption, sp.hashtags, this.deps.brandHandle);
           const results = await this.deps.publisher.publish(
             job.mediaPath,
-            sp.socialCaption,
+            caption,
             this.deps.publishTargets,
           );
           if (allPublished(results)) await this.dispatch(job.id, { type: "Published", results });

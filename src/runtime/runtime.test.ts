@@ -87,6 +87,7 @@ function makeRuntime(overrides?: {
     outputDir: "/tmp",
     mascotSheetPath: "sheet.png",
     publishTargets: ["instagram", "facebook"],
+    brandHandle: "@CodeWithQuirk",
     now: () => new Date("2026-06-09T12:00:00Z"),
   };
   return { runtime: new Runtime(deps), store, gateway, publisher };

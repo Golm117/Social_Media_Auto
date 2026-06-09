@@ -1,5 +1,23 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BlotatoPublisher } from "./blotato-publisher.js";
+import { composeCaption } from "./publisher.js";
+
+describe("composeCaption", () => {
+  it("appends a CTA + hashtags and always includes the branded tag (deduped)", () => {
+    const out = composeCaption("Great tip!", ["javascript", "CodeWithQuirk", "#webdev"]);
+    expect(out).toContain("Great tip!");
+    expect(out).toContain("💻 Follow @CodeWithQuirk for daily dev tips!");
+    expect(out).toContain("#javascript");
+    expect(out).toContain("#webdev"); // leading # normalized, not doubled
+    expect(out).not.toContain("##");
+    // branded tag present exactly once
+    expect(out.match(/#CodeWithQuirk\b/gi)?.length).toBe(1);
+  });
+
+  it("adds #CodeWithQuirk when the model omitted it", () => {
+    expect(composeCaption("x", ["coding"])).toContain("#CodeWithQuirk");
+  });
+});
 
 afterEach(() => vi.unstubAllGlobals());
 

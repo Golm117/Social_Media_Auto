@@ -75,6 +75,7 @@ async function main() {
     outputDir: cfg.outputDir,
     mascotSheetPath: cfg.mascotSheetPath,
     publishTargets: cfg.publishTargets,
+    brandHandle: cfg.brandHandle,
     now: () => new Date(),
   });
 

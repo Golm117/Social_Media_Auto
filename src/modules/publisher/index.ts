@@ -4,4 +4,4 @@ export type {
   PublishResult,
   Publisher,
 } from "./publisher.js";
-export { MockPublisher, allPublished } from "./publisher.js";
+export { MockPublisher, allPublished, composeCaption } from "./publisher.js";
