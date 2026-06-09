@@ -52,8 +52,19 @@ export function charsToWordTimings(alignment: CharAlignment): WordTiming[] {
     wordStart = null;
   };
 
+  let inTag = false; // skip Eleven v3 audio tags like [warmly] — they're delivery cues,
+  // not spoken words, so they must not appear in the on-screen captions.
   for (let i = 0; i < characters.length; i++) {
     const ch = characters[i] ?? "";
+    if (ch === "[") {
+      flush();
+      inTag = true;
+      continue;
+    }
+    if (inTag) {
+      if (ch === "]") inTag = false;
+      continue;
+    }
     if (/\s/.test(ch)) {
       flush();
       continue;
@@ -72,7 +83,7 @@ export function charsToWordTimings(alignment: CharAlignment): WordTiming[] {
 export interface ElevenLabsConfig {
   apiKey: string;
   voiceId: string;
-  modelId?: string; // default eleven_multilingual_v2
+  modelId?: string; // default eleven_v3 (expressive; supports audio tags + timestamps)
 }
 
 export class ElevenLabsTtsClient implements TtsClient {
@@ -83,7 +94,7 @@ export class ElevenLabsTtsClient implements TtsClient {
   constructor({ apiKey, voiceId, modelId }: ElevenLabsConfig) {
     this.apiKey = apiKey;
     this.voiceId = voiceId;
-    this.modelId = modelId ?? "eleven_multilingual_v2";
+    this.modelId = modelId ?? "eleven_v3";
   }
 
   async synthesize(text: string): Promise<{ audio: Buffer; alignment: CharAlignment }> {

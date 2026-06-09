@@ -38,6 +38,16 @@ describe("charsToWordTimings", () => {
   it("returns empty for no content", () => {
     expect(charsToWordTimings({ characters: [], startTimesSec: [], endTimesSec: [] })).toEqual([]);
   });
+
+  it("strips Eleven v3 audio tags so they don't appear as captions", () => {
+    // "[warm] yo" — the [warm] tag is a delivery cue, not a spoken word
+    const characters = "[warm] yo".split("");
+    const startTimesSec = characters.map((_, i) => i * 0.1);
+    const endTimesSec = characters.map((_, i) => i * 0.1 + 0.1);
+    expect(charsToWordTimings({ characters, startTimesSec, endTimesSec })).toEqual([
+      { word: "yo", startMs: 700, endMs: 900 },
+    ]);
+  });
 });
 
 describe("DefaultVoiceSynthesizer", () => {

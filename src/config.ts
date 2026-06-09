@@ -27,6 +27,7 @@ export interface AppConfig {
   e2bApiKey: string;
   elevenLabsApiKey: string;
   elevenLabsVoiceId: string;
+  elevenLabsModelId: string;
   telegramBotToken: string;
   telegramOperatorChatId: number;
   blotatoApiKey: string;
@@ -57,6 +58,7 @@ export function loadConfig(envPath = ".env"): AppConfig {
     e2bApiKey: need("E2B_API_KEY"),
     elevenLabsApiKey: need("ELEVENLABS_API_KEY"),
     elevenLabsVoiceId: need("ELEVENLABS_VOICE_ID"),
+    elevenLabsModelId: e.ELEVENLABS_MODEL_ID ?? "eleven_v3",
     telegramBotToken: need("TELEGRAM_BOT_TOKEN"),
     telegramOperatorChatId: Number(need("TELEGRAM_OPERATOR_CHAT_ID")),
     blotatoApiKey: e.BLOTATO_API_KEY ?? "",

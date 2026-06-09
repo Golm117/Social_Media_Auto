@@ -27,7 +27,11 @@ async function main() {
   );
   const codeVerifier = new DefaultCodeVerifier(new E2BSandbox({ apiKey: cfg.e2bApiKey }));
   const voice = new DefaultVoiceSynthesizer(
-    new ElevenLabsTtsClient({ apiKey: cfg.elevenLabsApiKey, voiceId: cfg.elevenLabsVoiceId }),
+    new ElevenLabsTtsClient({
+      apiKey: cfg.elevenLabsApiKey,
+      voiceId: cfg.elevenLabsVoiceId,
+      modelId: cfg.elevenLabsModelId,
+    }),
     cfg.outputDir,
   );
   const mascot = new DefaultMascotSequencer(await loadAtlas(cfg.atlasPath), cfg.outputDir);
