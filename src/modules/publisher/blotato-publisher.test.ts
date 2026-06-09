@@ -49,17 +49,21 @@ describe("BlotatoPublisher", () => {
   it("builds the correct per-platform target for instagram, facebook, tiktok", async () => {
     const calls = stubFetch(() => ({ ok: true, json: { id: "p" } }));
     const pub = new BlotatoPublisher(fullCfg);
-    const res = await pub.publish("/data/media/job.mp4", "hi #js", [
-      "instagram",
-      "facebook",
-      "tiktok",
-    ]);
+    const res = await pub.publish(
+      "/data/media/job.mp4",
+      { instagram: "ig", facebook: "fb", tiktok: "tt" },
+      ["instagram", "facebook", "tiktok"],
+    );
     expect(res.every((r) => r.ok)).toBe(true);
     const bodies = calls.map((c) => JSON.parse(c.init.body as string).post);
     // instagram: bare targetType + correct accountId + media url
     expect(bodies[0].target).toEqual({ targetType: "instagram" });
     expect(bodies[0].accountId).toBe("ig-1");
     expect(bodies[0].content.mediaUrls).toEqual(["https://cdn.example.com/media/job.mp4"]);
+    // each platform gets its OWN caption text from the map
+    expect(bodies[0].content.text).toBe("ig");
+    expect(bodies[1].content.text).toBe("fb");
+    expect(bodies[2].content.text).toBe("tt");
     // facebook: requires pageId
     expect(bodies[1].target).toEqual({ targetType: "facebook", pageId: "page-9" });
     // tiktok: required flags incl. AI disclosure
@@ -75,10 +79,11 @@ describe("BlotatoPublisher", () => {
         ? { ok: false, status: 429 }
         : { ok: true, json: { id: "p" } };
     });
-    const res = await new BlotatoPublisher(fullCfg).publish("/x.mp4", "c", [
-      "instagram",
-      "facebook",
-    ]);
+    const res = await new BlotatoPublisher(fullCfg).publish(
+      "/x.mp4",
+      { instagram: "c", facebook: "c" },
+      ["instagram", "facebook"],
+    );
     expect(res[0]).toEqual({ platform: "instagram", ok: true });
     expect(res[1]?.ok).toBe(false);
     expect(res[1]?.error).toContain("429");
@@ -91,7 +96,7 @@ describe("BlotatoPublisher", () => {
       accountIds: { facebook: "fb-1" },
       publicBaseUrl: "https://cdn.example.com",
     });
-    const res = await pub.publish("/x.mp4", "c", ["facebook"]);
+    const res = await pub.publish("/x.mp4", { facebook: "c" }, ["facebook"]);
     expect(res[0]?.ok).toBe(false);
     expect(res[0]?.error).toContain("facebookPageId");
   });
@@ -99,7 +104,7 @@ describe("BlotatoPublisher", () => {
   it("fails a platform with no configured accountId", async () => {
     stubFetch(() => ({ ok: true, json: {} }));
     const pub = new BlotatoPublisher({ apiKey: "k", publicBaseUrl: "https://cdn.example.com" });
-    const res = await pub.publish("/x.mp4", "c", ["instagram"]);
+    const res = await pub.publish("/x.mp4", { instagram: "c" }, ["instagram"]);
     expect(res[0]?.ok).toBe(false);
     expect(res[0]?.error).toContain("no Blotato accountId");
   });

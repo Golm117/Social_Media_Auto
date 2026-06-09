@@ -9,6 +9,7 @@ import { type Intent, type JobEvent, advance } from "../modules/job-orchestrator
 import type { JobStore } from "../modules/job-store/job-store.js";
 import type { MascotSequencer } from "../modules/mascot-sequencer/index.js";
 import {
+  type PostCaptions,
   type PublishTarget,
   type Publisher,
   allPublished,
@@ -235,10 +236,17 @@ export class Runtime {
           `📤 Uploading & posting to ${this.deps.publishTargets.join(", ")}…`,
         );
         try {
-          const caption = composeCaption(sp.socialCaption, sp.hashtags, this.deps.brandHandle);
+          // tailor a caption per platform (IG fuller, FB lighter, TikTok punchy)
+          const captions: PostCaptions = {};
+          for (const p of this.deps.publishTargets) {
+            captions[p] = composeCaption(sp.socialCaption, sp.hashtags, {
+              brandHandle: this.deps.brandHandle,
+              platform: p,
+            });
+          }
           const results = await this.deps.publisher.publish(
             job.mediaPath,
-            caption,
+            captions,
             this.deps.publishTargets,
           );
           if (allPublished(results)) await this.dispatch(job.id, { type: "Published", results });

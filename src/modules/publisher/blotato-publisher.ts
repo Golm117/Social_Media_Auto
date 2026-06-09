@@ -1,6 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
-import type { PublishResult, PublishResultItem, PublishTarget, Publisher } from "./publisher.js";
+import type {
+  PostCaptions,
+  PublishResult,
+  PublishResultItem,
+  PublishTarget,
+  Publisher,
+} from "./publisher.js";
 
 // NOTE: Built to Blotato's documented shape (blotato-api-key header, /v2/posts with
 // post.accountId + content.text + content.mediaUrls, /v2/media for upload). The exact
@@ -61,9 +67,10 @@ export class BlotatoPublisher implements Publisher {
 
   async publish(
     videoPath: string,
-    caption: string,
+    captions: PostCaptions,
     targets: PublishTarget[],
   ): Promise<PublishResult> {
+    // upload the media ONCE, then post each platform with its own caption
     let mediaUrl: string;
     try {
       mediaUrl = await this.resolveMediaUrl(videoPath);
@@ -75,9 +82,10 @@ export class BlotatoPublisher implements Publisher {
       try {
         const accountId = this.accountIds[platform];
         if (!accountId) throw new Error(`no Blotato accountId configured for ${platform}`);
+        const text = captions[platform] ?? "";
         await this.fetchJson(
           "/v2/posts",
-          JSON.stringify(this.buildPostBody(platform, accountId, caption, mediaUrl)),
+          JSON.stringify(this.buildPostBody(platform, accountId, text, mediaUrl)),
         );
         results.push({ platform, ok: true });
       } catch (e) {

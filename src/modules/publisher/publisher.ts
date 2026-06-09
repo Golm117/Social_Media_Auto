@@ -1,8 +1,9 @@
-// TODO (later slice): BlotatoPublisher — Blotato /v2/posts, takes a public mediaUrl
-
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export type PublishTarget = "instagram" | "facebook" | "tiktok";
+
+/** Per-platform post text (each platform can get a tailored caption). */
+export type PostCaptions = Partial<Record<PublishTarget, string>>;
 
 export interface PublishResultItem {
   platform: PublishTarget;
@@ -13,7 +14,12 @@ export interface PublishResultItem {
 export type PublishResult = PublishResultItem[];
 
 export interface Publisher {
-  publish(videoPath: string, caption: string, targets: PublishTarget[]): Promise<PublishResult>;
+  /** Media is uploaded once; each target is posted with its own caption from `captions`. */
+  publish(
+    videoPath: string,
+    captions: PostCaptions,
+    targets: PublishTarget[],
+  ): Promise<PublishResult>;
 }
 
 // ─── MockPublisher ───────────────────────────────────────────────────────────
@@ -22,7 +28,7 @@ type BehaviorConfig = Partial<Record<PublishTarget, { ok: boolean; error?: strin
 
 interface PublishCall {
   videoPath: string;
-  caption: string;
+  captions: PostCaptions;
   targets: PublishTarget[];
 }
 
@@ -40,10 +46,10 @@ export class MockPublisher implements Publisher {
 
   async publish(
     videoPath: string,
-    caption: string,
+    captions: PostCaptions,
     targets: PublishTarget[],
   ): Promise<PublishResult> {
-    this._calls.push({ videoPath, caption, targets });
+    this._calls.push({ videoPath, captions, targets });
     return targets.map((platform): PublishResultItem => {
       const behavior = this.config[platform];
       if (behavior === undefined) {
@@ -65,24 +71,47 @@ export function allPublished(result: PublishResult): boolean {
 
 const BRAND_TAG = "CodeWithQuirk";
 
+// Per-platform style: hashtag count + whether to trim the caption to a punchy first line.
+const PLATFORM_STYLE: Record<PublishTarget, { maxTags: number; punchy: boolean }> = {
+  instagram: { maxTags: 8, punchy: false },
+  facebook: { maxTags: 3, punchy: false }, // FB: hashtags add little, keep it light
+  tiktok: { maxTags: 4, punchy: true }, // TikTok: short & punchy, few tags
+};
+
+export interface CaptionOptions {
+  brandHandle?: string;
+  platform?: PublishTarget;
+}
+
 /**
- * Assemble the final post text: caption + CTA + hashtags (with `#`).
- * Ensures the branded #CodeWithQuirk tag is present, dedupes, and normalizes `#`.
+ * Assemble the final post text for a platform: caption (+ punchy trim for TikTok) + CTA +
+ * hashtags (with `#`), platform-appropriate hashtag count, always incl. branded #CodeWithQuirk.
  */
 export function composeCaption(
   socialCaption: string,
   hashtags: string[],
-  brandHandle = "@CodeWithQuirk",
+  opts: CaptionOptions = {},
 ): string {
+  const brandHandle = opts.brandHandle ?? "@CodeWithQuirk";
+  const style = (opts.platform && PLATFORM_STYLE[opts.platform]) || { maxTags: 8, punchy: false };
+
+  let body = socialCaption.trim();
+  if (style.punchy) {
+    // first sentence only, for a snappy TikTok caption
+    body = body.split(/(?<=[.!?])\s+/)[0] ?? body;
+  }
+
   const seen = new Set<string>();
   const tags: string[] = [];
-  for (const raw of [...hashtags, BRAND_TAG]) {
+  for (const raw of [BRAND_TAG, ...hashtags]) {
     const h = raw.replace(/^#/, "").replace(/\s+/g, "");
     const key = h.toLowerCase();
     if (!h || seen.has(key)) continue;
     seen.add(key);
     tags.push(`#${h}`);
+    if (tags.length >= style.maxTags) break;
   }
+
   const cta = `💻 Follow ${brandHandle} for daily dev tips!`;
-  return [socialCaption.trim(), cta, tags.join(" ")].filter(Boolean).join("\n\n");
+  return [body, cta, tags.join(" ")].filter(Boolean).join("\n\n");
 }

@@ -5,7 +5,7 @@ describe("MockPublisher — all success", () => {
   it("returns one ok:true item per target in input order", async () => {
     const mock = new MockPublisher();
 
-    const result = await mock.publish("/tmp/v.mp4", "cap", ["instagram", "facebook"]);
+    const result = await mock.publish("/tmp/v.mp4", {}, ["instagram", "facebook"]);
 
     expect(result).toHaveLength(2);
     expect(result[0]?.platform).toBe("instagram");
@@ -19,7 +19,7 @@ describe("MockPublisher — partial failure", () => {
   it("returns ok:true for instagram and ok:false with error for configured facebook failure", async () => {
     const mock = new MockPublisher({ facebook: { ok: false, error: "rate limited" } });
 
-    const result = await mock.publish("/tmp/v.mp4", "cap", ["instagram", "facebook"]);
+    const result = await mock.publish("/tmp/v.mp4", {}, ["instagram", "facebook"]);
 
     expect(result).toHaveLength(2);
     expect(result[0]?.platform).toBe("instagram");
@@ -35,7 +35,7 @@ describe("MockPublisher — single target", () => {
   it("returns exactly one result item when only one target is given", async () => {
     const mock = new MockPublisher();
 
-    const result = await mock.publish("/tmp/v.mp4", "cap", ["instagram"]);
+    const result = await mock.publish("/tmp/v.mp4", {}, ["instagram"]);
 
     expect(result).toHaveLength(1);
     expect(result[0]?.platform).toBe("instagram");
@@ -47,11 +47,14 @@ describe("MockPublisher — call recording", () => {
   it("records the videoPath, caption, and targets of each publish call", async () => {
     const mock = new MockPublisher();
 
-    await mock.publish("/tmp/v.mp4", "my caption", ["instagram", "facebook"]);
+    await mock.publish("/tmp/v.mp4", { instagram: "ig cap", facebook: "fb cap" }, [
+      "instagram",
+      "facebook",
+    ]);
 
     expect(mock.calls).toHaveLength(1);
     expect(mock.calls[0]?.videoPath).toBe("/tmp/v.mp4");
-    expect(mock.calls[0]?.caption).toBe("my caption");
+    expect(mock.calls[0]?.captions).toEqual({ instagram: "ig cap", facebook: "fb cap" });
     expect(mock.calls[0]?.targets).toEqual(["instagram", "facebook"]);
   });
 });
@@ -82,7 +85,7 @@ describe("MockPublisher — order preserved", () => {
   it("returns results in the same order as targets input when reversed", async () => {
     const mock = new MockPublisher();
 
-    const result = await mock.publish("/tmp/v.mp4", "cap", ["facebook", "instagram"]);
+    const result = await mock.publish("/tmp/v.mp4", {}, ["facebook", "instagram"]);
 
     expect(result).toHaveLength(2);
     expect(result[0]?.platform).toBe("facebook");

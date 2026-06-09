@@ -1,5 +1,6 @@
 export type {
   PublishTarget,
+  PostCaptions,
   PublishResultItem,
   PublishResult,
   Publisher,
