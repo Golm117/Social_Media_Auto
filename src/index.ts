@@ -55,7 +55,20 @@ export {
   ElevenLabsTtsClient,
   DefaultVoiceSynthesizer,
 } from "./modules/voice-synthesizer/index.js";
-export type { MascotSequencer } from "./modules/mascot-sequencer/index.js";
+export type {
+  MascotSequencer,
+  MascotAtlas,
+  AtlasFrame,
+  MascotCue,
+  MascotSegment,
+  MascotTrack,
+} from "./modules/mascot-sequencer/index.js";
+export {
+  DEFAULT_STATE_TO_EMOTION,
+  loadAtlas,
+  buildSegments,
+  DefaultMascotSequencer,
+} from "./modules/mascot-sequencer/index.js";
 export type { VideoComposer } from "./modules/video-composer/index.js";
 export type {
   PublishTarget,
