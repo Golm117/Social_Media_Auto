@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { MascotState } from "../../domain/script-package.js";
@@ -132,7 +133,8 @@ export class DefaultMascotSequencer implements MascotSequencer {
       segments: buildSegments(cues, totalMs, this.atlas, this.stateToEmotion),
     };
     await mkdir(this.outputDir, { recursive: true });
-    const trackPath = join(this.outputDir, "mascot-track.json");
+    // unique per call: a shared filename would let concurrent jobs clobber each other
+    const trackPath = join(this.outputDir, `mascot-track-${randomUUID().slice(0, 8)}.json`);
     await writeFile(trackPath, JSON.stringify(track, null, 2));
     return { trackPath };
   }

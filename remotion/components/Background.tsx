@@ -1,4 +1,5 @@
 import { AbsoluteFill } from "remotion";
+import { PIXEL_FONT } from "./font";
 
 export const Background = ({ hook }: { hook: string }) => (
   <AbsoluteFill>
@@ -18,10 +19,10 @@ export const Background = ({ hook }: { hook: string }) => (
           background: "#1a0b3a",
           padding: "28px 32px",
           color: "#fdf6e3",
-          fontFamily: "monospace",
-          fontWeight: 800,
-          fontSize: 56,
-          lineHeight: 1.15,
+          // Press Start 2P renders ~2x wider than mono — smaller size, looser leading
+          fontFamily: PIXEL_FONT,
+          fontSize: 38,
+          lineHeight: 1.45,
           textShadow: "3px 3px 0 #ff2e88",
         }}
       >
@@ -36,9 +37,8 @@ export const Background = ({ hook }: { hook: string }) => (
         width: "100%",
         textAlign: "center",
         color: "#36f9f6",
-        fontFamily: "monospace",
-        fontWeight: 700,
-        fontSize: 34,
+        fontFamily: PIXEL_FONT,
+        fontSize: 24,
         letterSpacing: 2,
       }}
     >

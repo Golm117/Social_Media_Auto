@@ -32,6 +32,8 @@ export interface RuntimeDeps {
   schedulerConfig: SchedulerConfig;
   outputDir: string;
   mascotSheetPath: string;
+  /** Optional background-music file, mixed quietly under the voiceover. */
+  musicPath?: string;
   publishTargets: PublishTarget[];
   brandHandle: string;
   now: () => Date;
@@ -260,11 +262,15 @@ export class Runtime {
           const { videoPath } = await this.deps.video.compose({
             scriptPackage: sp,
             audioPath,
+            ...(this.deps.musicPath ? { musicPath: this.deps.musicPath } : {}),
             mascotTrackPath: trackPath,
             timings,
             mascotSheetPath: this.deps.mascotSheetPath,
             outputPath: join(this.deps.outputDir, `${job.id}.mp4`),
           });
+          // the voiceover + track are baked into the mp4 — don't let temp files pile up
+          await rm(audioPath, { force: true }).catch(() => {});
+          await rm(trackPath, { force: true }).catch(() => {});
           await this.dispatch(job.id, { type: "RenderCompleted", mediaPath: videoPath });
         } catch (e) {
           await fail("rendering", e);

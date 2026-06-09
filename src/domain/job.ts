@@ -21,7 +21,6 @@ export interface Job {
   state: JobState;
   scriptPackage?: ScriptPackage;
   mediaPath?: string;
-  telegramRef?: { chatId: number; messageId: number };
   publishResults?: Array<{
     platform: "instagram" | "facebook" | "tiktok";
     ok: boolean;

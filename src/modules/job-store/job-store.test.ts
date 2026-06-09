@@ -99,26 +99,6 @@ describe("SqliteJobStore", () => {
     expect(store.listByState("failed")).toHaveLength(0);
   });
 
-  it("findByTelegramMessage returns the matching job", () => {
-    const job = makeJob({
-      id: "tg-job",
-      telegramRef: { chatId: 12345, messageId: 99 },
-    });
-    store.save(job);
-    store.save(makeJob({ id: "other-job" }));
-
-    const found = store.findByTelegramMessage(12345, 99);
-    expect(found?.id).toBe("tg-job");
-    expect(found?.telegramRef).toEqual({ chatId: 12345, messageId: 99 });
-  });
-
-  it("findByTelegramMessage returns undefined when no match", () => {
-    store.save(makeJob({ id: "j1", telegramRef: { chatId: 111, messageId: 1 } }));
-
-    expect(store.findByTelegramMessage(999, 1)).toBeUndefined();
-    expect(store.findByTelegramMessage(111, 999)).toBeUndefined();
-  });
-
   it("get returns undefined for unknown id", () => {
     expect(store.get("does-not-exist")).toBeUndefined();
   });

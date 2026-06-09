@@ -5,15 +5,12 @@ export interface JobStore {
   get(id: JobId): Job | undefined;
   save(job: Job): void;
   listByState(state: JobState): Job[];
-  findByTelegramMessage(chatId: number, messageId: number): Job | undefined;
 }
 
 const CREATE_TABLE = `
   CREATE TABLE IF NOT EXISTS jobs (
     id TEXT PRIMARY KEY,
     state TEXT NOT NULL,
-    telegram_chat_id INTEGER,
-    telegram_message_id INTEGER,
     scheduled_for TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -22,8 +19,6 @@ const CREATE_TABLE = `
 `;
 
 const CREATE_IDX_STATE = "CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs (state)";
-const CREATE_IDX_TELEGRAM =
-  "CREATE INDEX IF NOT EXISTS idx_jobs_telegram ON jobs (telegram_chat_id, telegram_message_id)";
 
 export class SqliteJobStore implements JobStore {
   private readonly db: Database.Database;
@@ -33,7 +28,6 @@ export class SqliteJobStore implements JobStore {
     this.db.pragma("journal_mode = WAL");
     this.db.exec(CREATE_TABLE);
     this.db.exec(CREATE_IDX_STATE);
-    this.db.exec(CREATE_IDX_TELEGRAM);
   }
 
   get(id: JobId): Job | undefined {
@@ -50,15 +44,11 @@ export class SqliteJobStore implements JobStore {
     const data = JSON.stringify(persisted);
 
     this.db
-      .prepare<
-        [string, string, number | null, number | null, string | null, string, string, string]
-      >(
-        `INSERT INTO jobs (id, state, telegram_chat_id, telegram_message_id, scheduled_for, created_at, updated_at, data)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      .prepare<[string, string, string | null, string, string, string]>(
+        `INSERT INTO jobs (id, state, scheduled_for, created_at, updated_at, data)
+         VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            state = excluded.state,
-           telegram_chat_id = excluded.telegram_chat_id,
-           telegram_message_id = excluded.telegram_message_id,
            scheduled_for = excluded.scheduled_for,
            updated_at = excluded.updated_at,
            data = excluded.data`,
@@ -66,8 +56,6 @@ export class SqliteJobStore implements JobStore {
       .run(
         persisted.id,
         persisted.state,
-        persisted.telegramRef?.chatId ?? null,
-        persisted.telegramRef?.messageId ?? null,
         persisted.scheduledFor ?? null,
         persisted.createdAt,
         persisted.updatedAt,
@@ -80,16 +68,6 @@ export class SqliteJobStore implements JobStore {
       .prepare<[string], { data: string }>("SELECT data FROM jobs WHERE state = ?")
       .all(state);
     return rows.map((r) => JSON.parse(r.data) as Job);
-  }
-
-  findByTelegramMessage(chatId: number, messageId: number): Job | undefined {
-    const row = this.db
-      .prepare<[number, number], { data: string }>(
-        "SELECT data FROM jobs WHERE telegram_chat_id = ? AND telegram_message_id = ?",
-      )
-      .get(chatId, messageId);
-    if (!row) return undefined;
-    return JSON.parse(row.data) as Job;
   }
 
   close(): void {

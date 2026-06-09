@@ -30,7 +30,17 @@ async function highlight(code: string, lang: string): Promise<HighlightedLine[]>
 }
 
 export class DefaultVideoComposer implements VideoComposer {
-  async compose(input: ComposeInput): Promise<{ videoPath: string }> {
+  // Renders are serialized: concurrent renders would clobber the shared per-process
+  // public dir and contend for CPU (each render runs headless Chrome + encoding).
+  private queue: Promise<unknown> = Promise.resolve();
+
+  compose(input: ComposeInput): Promise<{ videoPath: string }> {
+    const run = this.queue.then(() => this.doCompose(input));
+    this.queue = run.catch(() => {});
+    return run;
+  }
+
+  private async doCompose(input: ComposeInput): Promise<{ videoPath: string }> {
     const { scriptPackage, audioPath, mascotTrackPath, timings, mascotSheetPath, outputPath } =
       input;
 
@@ -60,9 +70,12 @@ export class DefaultVideoComposer implements VideoComposer {
       durationMs: computeDurationMs(track, timings),
       fps: VIDEO_FPS,
     };
+    if (input.musicPath) {
+      await cp(input.musicPath, join(publicDir, "music.mp3"));
+      props.musicSrc = "music.mp3";
+    }
 
-    // Remotion's inputProps is typed as Record<string, unknown>; our typed props satisfy it.
-    const inputProps = props as unknown as Record<string, unknown>;
+    const inputProps: Record<string, unknown> = props;
     const here = dirname(fileURLToPath(import.meta.url));
     const entry = resolve(here, "../../../remotion/index.ts");
     try {

@@ -28,6 +28,8 @@ export interface AppConfig {
   elevenLabsApiKey: string;
   elevenLabsVoiceId: string;
   elevenLabsModelId: string;
+  /** eleven_v3 stability: 0.0 (creative) | 0.5 (natural) | 1.0 (robust). Unset = voice default. */
+  elevenLabsStability?: number;
   telegramBotToken: string;
   telegramOperatorChatId: number;
   blotatoApiKey: string;
@@ -40,6 +42,8 @@ export interface AppConfig {
   publicBaseUrl: string;
   databasePath: string;
   outputDir: string;
+  /** Optional background-music file mixed quietly under the voiceover ("" = no music). */
+  musicPath: string;
   atlasPath: string;
   mascotSheetPath: string;
   scheduleSlots: string[];
@@ -60,6 +64,7 @@ export function loadConfig(envPath = ".env"): AppConfig {
     elevenLabsApiKey: need("ELEVENLABS_API_KEY"),
     elevenLabsVoiceId: need("ELEVENLABS_VOICE_ID"),
     elevenLabsModelId: e.ELEVENLABS_MODEL_ID ?? "eleven_v3",
+    ...(e.ELEVENLABS_STABILITY ? { elevenLabsStability: Number(e.ELEVENLABS_STABILITY) } : {}),
     telegramBotToken: need("TELEGRAM_BOT_TOKEN"),
     telegramOperatorChatId: Number(need("TELEGRAM_OPERATOR_CHAT_ID")),
     blotatoApiKey: e.BLOTATO_API_KEY ?? "",
@@ -75,6 +80,7 @@ export function loadConfig(envPath = ".env"): AppConfig {
     publicBaseUrl: e.PUBLIC_BASE_URL ?? "",
     databasePath: e.DATABASE_PATH ?? "./data/coddy.db",
     outputDir: e.OUTPUT_DIR ?? "./data/media",
+    musicPath: e.MUSIC_PATH ?? "",
     atlasPath: e.MASCOT_ATLAS ?? "assets/mascot/coddy-atlas.json",
     mascotSheetPath: e.MASCOT_SHEET ?? "assets/mascot/coddy-sheet.png",
     scheduleSlots: (e.SCHEDULE_SLOTS ?? "09:00,17:00").split(",").map((s) => s.trim()),

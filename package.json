@@ -30,6 +30,7 @@
   "dependencies": {
     "@openrouter/ai-sdk-provider": "^2.9.0",
     "@remotion/bundler": "^4.0.474",
+    "@remotion/google-fonts": "4.0.474",
     "@remotion/renderer": "^4.0.474",
     "ai": "^6.0.198",
     "better-sqlite3": "^11.5.0",

@@ -36,7 +36,9 @@ export interface CoddyWordTiming {
   endMs: number;
 }
 
-export interface CoddyVideoProps {
+// type alias (not interface): the implicit index signature lets it satisfy
+// Remotion's Record<string, unknown> props constraint in <Composition>.
+export type CoddyVideoProps = {
   hook: string;
   templateId: string;
   steps: Array<{
@@ -46,15 +48,19 @@ export interface CoddyVideoProps {
   }>;
   timings: CoddyWordTiming[];
   audioSrc: string;
+  /** Optional looping background-music file (relative to the bundle public dir). */
+  musicSrc?: string;
   mascotSheetSrc: string;
   mascotTrack: CoddyMascotTrack;
   durationMs: number;
   fps: number;
-}
+};
 
 export interface ComposeInput {
   scriptPackage: ScriptPackage;
   audioPath: string;
+  /** Optional background-music file, mixed quietly under the voiceover. */
+  musicPath?: string;
   mascotTrackPath: string;
   timings: CoddyWordTiming[];
   mascotSheetPath: string;

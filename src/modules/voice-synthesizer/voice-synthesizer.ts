@@ -84,25 +84,31 @@ export interface ElevenLabsConfig {
   apiKey: string;
   voiceId: string;
   modelId?: string; // default eleven_v3 (expressive; supports audio tags + timestamps)
+  /** eleven_v3 stability: 0.0 (creative) | 0.5 (natural) | 1.0 (robust). Omit for the voice default. */
+  stability?: number;
 }
 
 export class ElevenLabsTtsClient implements TtsClient {
   private readonly apiKey: string;
   private readonly voiceId: string;
   private readonly modelId: string;
+  private readonly stability: number | undefined;
 
-  constructor({ apiKey, voiceId, modelId }: ElevenLabsConfig) {
+  constructor({ apiKey, voiceId, modelId, stability }: ElevenLabsConfig) {
     this.apiKey = apiKey;
     this.voiceId = voiceId;
     this.modelId = modelId ?? "eleven_v3";
+    this.stability = stability;
   }
 
   async synthesize(text: string): Promise<{ audio: Buffer; alignment: CharAlignment }> {
     const url = `https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/with-timestamps`;
+    const body: Record<string, unknown> = { text, model_id: this.modelId };
+    if (this.stability !== undefined) body.voice_settings = { stability: this.stability };
     const res = await fetch(url, {
       method: "POST",
       headers: { "xi-api-key": this.apiKey, "content-type": "application/json" },
-      body: JSON.stringify({ text, model_id: this.modelId }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) {
       throw new Error(`ElevenLabs TTS failed: ${res.status} ${await res.text()}`);

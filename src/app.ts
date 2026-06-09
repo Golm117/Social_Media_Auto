@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { loadConfig } from "./config.js";
 import { DefaultCodeVerifier, E2BSandbox } from "./modules/code-verifier/index.js";
@@ -31,9 +32,16 @@ async function main() {
       apiKey: cfg.elevenLabsApiKey,
       voiceId: cfg.elevenLabsVoiceId,
       modelId: cfg.elevenLabsModelId,
+      ...(cfg.elevenLabsStability !== undefined ? { stability: cfg.elevenLabsStability } : {}),
     }),
     cfg.outputDir,
   );
+
+  let musicPath: string | undefined;
+  if (cfg.musicPath) {
+    if (existsSync(cfg.musicPath)) musicPath = cfg.musicPath;
+    else console.warn(`⚠️  MUSIC_PATH not found: ${cfg.musicPath} — rendering without music.`);
+  }
   const mascot = new DefaultMascotSequencer(await loadAtlas(cfg.atlasPath), cfg.outputDir);
   const video = new DefaultVideoComposer();
   const gateway = new TelegramGateway({
@@ -74,6 +82,7 @@ async function main() {
     schedulerConfig: { slots: cfg.scheduleSlots, timeZone: cfg.scheduleTimeZone },
     outputDir: cfg.outputDir,
     mascotSheetPath: cfg.mascotSheetPath,
+    ...(musicPath ? { musicPath } : {}),
     publishTargets: cfg.publishTargets,
     brandHandle: cfg.brandHandle,
     now: () => new Date(),

@@ -16,6 +16,8 @@ export const CoddyVideo = (props: CoddyVideoProps) => {
       <Coddy track={props.mascotTrack} sheetSrc={props.mascotSheetSrc} ms={ms} />
       <Captions timings={props.timings} ms={ms} />
       {props.audioSrc ? <Audio src={staticFile(props.audioSrc)} /> : null}
+      {/* background music: quiet bed under the voiceover */}
+      {props.musicSrc ? <Audio src={staticFile(props.musicSrc)} volume={0.07} loop /> : null}
     </AbsoluteFill>
   );
 };
