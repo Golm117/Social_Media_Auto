@@ -25,7 +25,7 @@ const gen = new DefaultContentGenerator(
   new OpenRouterModelClient({ apiKey: env("OPENROUTER_API_KEY"), routing: DEFAULT_ROUTING }),
 );
 const sp = await gen.generate("What is a variable in JavaScript?");
-console.log("=== VOICEOVER (should contain a few [emotion] tags) ===\n" + sp.voiceoverText + "\n");
+console.log(`=== VOICEOVER (should contain a few [emotion] tags) ===\n${sp.voiceoverText}\n`);
 const voice = new DefaultVoiceSynthesizer(
   new ElevenLabsTtsClient({
     apiKey: env("ELEVENLABS_API_KEY"),
@@ -36,5 +36,5 @@ const voice = new DefaultVoiceSynthesizer(
 );
 const { timings } = await voice.synthesize(sp.voiceoverText);
 const caption = timings.map((t) => t.word).join(" ");
-console.log("=== CAPTION WORDS (must NOT contain [tags]) ===\n" + caption);
+console.log(`=== CAPTION WORDS (must NOT contain [tags]) ===\n${caption}`);
 console.log("\nbracket leaked into captions?", /[\[\]]/.test(caption) ? "YES ❌" : "NO ✅");
