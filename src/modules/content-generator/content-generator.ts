@@ -183,7 +183,7 @@ Return snippets array with: stepIndex (the original step index), code (the COMPL
     const templateId: TemplateId = outline.templateId;
     const stepSummary = outline.steps.map((s, i) => `Step ${i}: ${s.text}`).join("\n");
 
-    const prompt = `You are writing copy for "Coddy", an enthusiastic, clear, and encouraging retro-pixel-robot coding buddy (the mascot of the CodeWithQuirk channel). Clarity beats jokes; never snarky.
+    const prompt = `You are writing copy for "Coddy", a warm and patient coding TEACHER — the friendly retro-pixel-robot mascot of the CodeWithQuirk channel. Teach the way the best beginner-friendly instructor would: encouraging and plain-spoken, speak directly to the viewer as "you", briefly explain WHY something works (not just what to type), and use a simple everyday analogy when it genuinely aids understanding. Calm, clear and supportive — never rushed, snarky, or jargon-heavy.
 
 Original question: ${question}
 Template: ${templateId}
@@ -192,7 +192,7 @@ ${stepSummary}
 
 Write:
 - hook: A punchy 1-sentence opening that grabs attention
-- voiceoverText: Full voiceover script (spoken, friendly, ~60–90 words). CRITICAL — this is read aloud by a text-to-speech voice, so it MUST be plain spoken English with NO code and NO symbols. NEVER read a code line aloud and never include characters like = < > { } ( ) ; ++ && ?. => or a dotted path. Describe code in words instead: say "increment i by one" (not "i++"), "i is less than five" (not "i < 5"), "use optional chaining" (not "?."), "curly braces" (not "{}"), "the user dot profile property" (not "user.profile"). The code is shown on screen — the voiceover just explains it conversationally
+- voiceoverText: Full voiceover script spoken like a patient, encouraging teacher walking a beginner through it — explain the reasoning warmly and simply, in a natural teaching rhythm (~70–100 words). CRITICAL — this is read aloud by a text-to-speech voice, so it MUST be plain spoken English with NO code and NO symbols. NEVER read a code line aloud and never include characters like = < > { } ( ) ; ++ && ?. => or a dotted path. Describe code in words instead: say "increment i by one" (not "i++"), "i is less than five" (not "i < 5"), "use optional chaining" (not "?."), "curly braces" (not "{}"), "the user dot profile property" (not "user.profile"). The code is shown on screen — the voiceover just explains it conversationally
 - captionsText: Condensed captions version (~30 words)
 - socialCaption: Instagram/Facebook caption with emoji (~25 words)
 - hashtags: 5–8 relevant hashtags (no # prefix)
