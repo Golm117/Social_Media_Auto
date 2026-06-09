@@ -39,6 +39,17 @@ export interface RuntimeDeps {
   now: () => Date;
 }
 
+function formatSlot(iso: string, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+
 function notifyText(intent: Extract<Intent, { type: "NotifyOperator" }>): string {
   switch (intent.kind) {
     case "generating":
@@ -71,6 +82,32 @@ export class Runtime {
     this.deps.gateway.onAction((action, jobId, payload) =>
       this.handleAction(action, jobId, payload),
     );
+    this.deps.gateway.onQueueRequest(() => this.queueSummary());
+  }
+
+  /** Human-readable summary of upcoming scheduled posts (for the /queue command). */
+  queueSummary(): string {
+    const tz = this.deps.schedulerConfig.timeZone;
+    const approved = this.deps.store.listByState("approved");
+    const scheduled = approved
+      .filter((j): j is Job & { scheduledFor: string } => j.scheduledFor !== undefined)
+      .sort((a, b) => (a.scheduledFor < b.scheduledFor ? -1 : 1));
+    const needsRetry = approved.filter((j) => j.scheduledFor === undefined);
+
+    const lines: string[] = [];
+    if (scheduled.length > 0) {
+      lines.push("🗓 Upcoming posts:");
+      lines.push(
+        ...scheduled.map(
+          (j, i) => `${i + 1}. ${formatSlot(j.scheduledFor, tz)} — ${j.question.slice(0, 60)}`,
+        ),
+      );
+    }
+    if (needsRetry.length > 0) {
+      lines.push("⚠️ Awaiting manual retry (publish failed):");
+      lines.push(...needsRetry.map((j) => `• ${j.question.slice(0, 60)}`));
+    }
+    return lines.length > 0 ? lines.join("\n") : "🗓 Queue is empty — nothing scheduled.";
   }
 
   async submitQuestion(question: string): Promise<JobId> {
@@ -106,6 +143,10 @@ export class Runtime {
         );
         this.deps.store.save({ ...job, scheduledFor: slot.toISOString() });
         await this.dispatch(jobId, { type: "Approved" });
+        await this.deps.gateway.notify(
+          job,
+          `🗓 Scheduled — will post ${formatSlot(slot.toISOString(), this.deps.schedulerConfig.timeZone)}. Send /queue to see what's lined up.`,
+        );
         return;
       }
       case "postNow": {

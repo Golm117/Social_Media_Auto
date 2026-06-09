@@ -60,6 +60,10 @@ class RecordingGateway implements ConversationGateway {
   async sendActionPrompt(job: Job, message: string, actions: OperatorAction[]) {
     this.prompts.push({ jobId: job.id, message, actions });
   }
+  queueHandler: (() => Promise<string> | string) | null = null;
+  onQueueRequest(handler: () => Promise<string> | string) {
+    this.queueHandler = handler;
+  }
 }
 
 function makeRuntime<P extends Publisher = MockPublisher>(overrides?: {
@@ -164,6 +168,45 @@ describe("Runtime", () => {
     await runtime.handleAction("approve", id);
     await runtime.handleAction("reject", id);
     expect(store.get(id)?.state).toBe("rejected");
+  });
+
+  it("approve confirms the assigned slot to the operator", async () => {
+    const { runtime, store, gateway } = makeRuntime();
+    const id = await runtime.submitQuestion("q");
+    await runtime.handleAction("approve", id);
+    expect(store.get(id)?.scheduledFor).toBeDefined();
+    // now=2026-06-09T12:00Z is 08:00 in Toronto → next 09:00 slot is the same day
+    const confirmation = gateway.notifications.find((n) => n.includes("Scheduled"));
+    expect(confirmation).toContain("9:00");
+    expect(confirmation).toContain("Jun 9");
+  });
+
+  it("queueSummary lists scheduled posts in order and is wired to /queue", async () => {
+    const { runtime, store, gateway } = makeRuntime();
+    runtime.start();
+    expect(runtime.queueSummary()).toContain("empty");
+
+    const id1 = await runtime.submitQuestion("first question");
+    await runtime.handleAction("approve", id1);
+    const id2 = await runtime.submitQuestion("second question");
+    await runtime.handleAction("approve", id2);
+
+    const summary = runtime.queueSummary();
+    expect(summary.indexOf("first question")).toBeLessThan(summary.indexOf("second question"));
+    // second approval queues into the NEXT day's slot (one slot/day configured)
+    expect(store.get(id2)?.scheduledFor).not.toBe(store.get(id1)?.scheduledFor);
+    // /queue handler registered by start() returns the same summary
+    expect(await gateway.queueHandler?.()).toBe(summary);
+  });
+
+  it("queueSummary flags failed publishes awaiting retry", async () => {
+    const publisher = new FlakyPublisher(["instagram", "facebook"]);
+    const { runtime } = makeRuntime({ publisher });
+    const id = await runtime.submitQuestion("flaky question");
+    await runtime.handleAction("postNow", id);
+    const summary = runtime.queueSummary();
+    expect(summary).toContain("Awaiting manual retry");
+    expect(summary).toContain("flaky question");
   });
 
   it("tick publishes due approved jobs", async () => {

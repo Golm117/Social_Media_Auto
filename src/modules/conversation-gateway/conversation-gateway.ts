@@ -9,10 +9,13 @@ export type ActionHandler = (
   jobId: string,
   payload?: string,
 ) => Promise<void> | void;
+export type QueueRequestHandler = () => Promise<string> | string;
 
 export interface ConversationGateway {
   onQuestion(handler: QuestionHandler): void;
   onAction(handler: ActionHandler): void;
+  /** Handler returns the text reply for the /queue command. */
+  onQueueRequest(handler: QueueRequestHandler): void;
   notify(job: Job, message: string): Promise<void>;
   sendDraftForApproval(job: Job): Promise<void>;
   /** A notify with action buttons, for messages the operator must respond to. */
@@ -36,6 +39,7 @@ export class TelegramGateway implements ConversationGateway {
   private readonly operatorChatId: number;
   private questionHandler: QuestionHandler = () => {};
   private actionHandler: ActionHandler = () => {};
+  private queueRequestHandler: QueueRequestHandler = () => "🗓 Queue is not available yet.";
   private pendingReviseJobId: string | null = null;
 
   constructor({ token, operatorChatId }: TelegramGatewayConfig) {
@@ -49,6 +53,9 @@ export class TelegramGateway implements ConversationGateway {
   }
   onAction(handler: ActionHandler): void {
     this.actionHandler = handler;
+  }
+  onQueueRequest(handler: QueueRequestHandler): void {
+    this.queueRequestHandler = handler;
   }
 
   async notify(_job: Job, message: string): Promise<void> {
@@ -96,8 +103,9 @@ export class TelegramGateway implements ConversationGateway {
       if (text.startsWith("/")) {
         if (text === "/start")
           await ctx.reply(
-            "👋 I'm Coddy's assistant. Send me a coding question and I'll make a Reel.",
+            "👋 I'm Coddy's assistant. Send me a coding question and I'll make a Reel. Use /queue to see scheduled posts.",
           );
+        if (text === "/queue") await ctx.reply(await this.queueRequestHandler());
         return;
       }
       if (this.pendingReviseJobId) {
