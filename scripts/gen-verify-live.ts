@@ -1,0 +1,12 @@
+import { readFileSync } from "node:fs";
+import { DefaultCodeVerifier, E2BSandbox } from "../src/modules/code-verifier/code-verifier.js";
+import { DefaultContentGenerator, DEFAULT_ROUTING, OpenRouterModelClient } from "../src/modules/content-generator/content-generator.js";
+const env = (k:string)=>{for(const l of readFileSync(".env","utf8").split("\n")){if(l.trimStart().startsWith("#")||!l.includes("="))continue;const[a,...r]=l.split("=");if(a.trim()===k)return r.join("=").split(/\s+#/)[0].trim().replace(/^['"]|['"]$/g,"");}throw new Error(k);};
+const gen = new DefaultContentGenerator(new OpenRouterModelClient({ apiKey: env("OPENROUTER_API_KEY"), routing: DEFAULT_ROUTING }));
+const cv = new DefaultCodeVerifier(new E2BSandbox({ apiKey: env("E2B_API_KEY") }));
+const sp = await gen.generate("How do I safely access deeply nested object properties in JavaScript?");
+console.log("template:", sp.templateId, "| code steps:", sp.bodySteps.filter(s=>s.code).length);
+const snippets = sp.bodySteps.filter(s=>s.code&&s.language).map(s=>({code:s.code as string, language:s.language as "javascript"}));
+const res = await cv.verify(snippets);
+for (const r of res) console.log(`  snippet ${r.snippetIndex}: ${r.ok?"✅ PASS":"❌ FAIL "+r.stderr.split("\n")[0]}`);
+console.log(res.every(r=>r.ok) ? "\n🎉 all generated snippets RUN cleanly" : "\n⚠️ some still failing");

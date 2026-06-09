@@ -102,9 +102,12 @@ export class Runtime {
         await this.dispatch(jobId, { type: "PublishRequested" });
         return;
       }
-      case "revise":
+      case "revise": {
+        const job = this.deps.store.get(jobId);
+        if (job) this.deps.store.save({ ...job, lastRevision: payload ?? "" });
         await this.dispatch(jobId, { type: "ReviseRequested", instructions: payload ?? "" });
         return;
+      }
       case "reject":
         await this.dispatch(jobId, { type: "Rejected" });
         return;
@@ -159,7 +162,10 @@ export class Runtime {
         return;
       case "GenerateContent":
         try {
-          const scriptPackage = await this.deps.contentGenerator.generate(job.question);
+          const scriptPackage = await this.deps.contentGenerator.generate(
+            job.question,
+            job.lastRevision,
+          );
           await this.dispatch(job.id, { type: "ContentGenerated", scriptPackage });
         } catch (e) {
           await fail("generating", e);

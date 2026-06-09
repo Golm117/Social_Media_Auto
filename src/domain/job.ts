@@ -27,6 +27,8 @@ export interface Job {
     error?: string;
   }>;
   scheduledFor?: string;
+  /** Last operator revise instruction, applied on the next regeneration. */
+  lastRevision?: string;
   createdAt: string;
   updatedAt: string;
 }

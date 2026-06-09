@@ -27,7 +27,7 @@ export interface ModelClient {
 // ─── ContentGenerator interface ────────────────────────────────────────────
 
 export interface ContentGenerator {
-  generate(question: string): Promise<ScriptPackage>;
+  generate(question: string, revision?: string): Promise<ScriptPackage>;
 }
 
 // ─── Default routing config ────────────────────────────────────────────────
@@ -114,20 +114,20 @@ type CopyStageOutput = z.infer<typeof CopyStageOutputSchema>;
 export class DefaultContentGenerator implements ContentGenerator {
   constructor(private readonly client: ModelClient) {}
 
-  async generate(question: string): Promise<ScriptPackage> {
-    // Stage 1 (glue): template selection + structural outline
-    const outline = await this.runGlueStage(question);
-
-    // Stage 2 (code): generate code snippets for steps that need them
-    const codeOutput = await this.runCodeStage(outline);
-
-    // Stage 3 (copy): hooks, captions, mascot cues
-    const copy = await this.runCopyStage(question, outline);
-
+  async generate(question: string, revision?: string): Promise<ScriptPackage> {
+    const outline = await this.runGlueStage(question, revision);
+    const codeOutput = await this.runCodeStage(outline, revision);
+    const copy = await this.runCopyStage(question, outline, revision);
     return this.assemble(outline, codeOutput, copy);
   }
 
-  private async runGlueStage(question: string): Promise<Outline> {
+  private reviseSuffix(revision?: string): string {
+    return revision && revision.trim()
+      ? `\n\nIMPORTANT — the operator requested this revision; apply it: "${revision.trim()}"`
+      : "";
+  }
+
+  private async runGlueStage(question: string, revision?: string): Promise<Outline> {
     const prompt = `You are a concise technical content planner.
 
 Given the developer question below, select the best template and outline the answer as a short-form video script.
@@ -144,12 +144,12 @@ Question: ${question}
 Return a templateId and an array of steps (2–5 steps). For each step include:
 - text: the spoken beat for that step
 - needsCode: true if showing a code snippet would help
-- language: (only when needsCode is true) one of javascript, typescript, python`;
+- language: (only when needsCode is true) one of javascript, typescript, python${this.reviseSuffix(revision)}`;
 
     return this.client.generateObject("glue", prompt, OutlineSchema);
   }
 
-  private async runCodeStage(outline: Outline): Promise<CodeStageOutput | null> {
+  private async runCodeStage(outline: Outline, revision?: string): Promise<CodeStageOutput | null> {
     const codeSteps = outline.steps
       .map((step, index) => ({ ...step, index }))
       .filter((step) => step.needsCode);
@@ -160,18 +160,26 @@ Return a templateId and an array of steps (2–5 steps). For each step include:
       .map((s) => `Step ${s.index} (${s.language ?? "javascript"}): ${s.text}`)
       .join("\n");
 
-    const prompt = `You are an expert coding educator writing concise, illustrative code snippets for a short-form video.
+    const prompt = `You are an expert coding educator writing code snippets for a short-form video. Each snippet is EXECUTED in a sandbox to verify it works, so it MUST be COMPLETE and SELF-CONTAINED.
 
-Write one clear code snippet per step listed below. Keep each snippet under 15 lines. Use the specified language.
+Hard rules for EVERY snippet:
+- It must run with ZERO errors via \`node\` (javascript/typescript) or \`python3\` (python).
+- Define ALL sample data and variables it uses — never reference an undefined symbol (e.g. don't use a bare \`user\` without first defining it).
+- End with a console.log / print that demonstrates the result, so running it produces visible output.
+- Prioritise being runnable over being short (aim under ~18 lines, but correctness first).
 
 ${stepDescriptions}
 
-Return snippets array with: stepIndex (the original step index), code (the snippet), language.`;
+Return snippets array with: stepIndex (the original step index), code (the COMPLETE runnable snippet), language.${this.reviseSuffix(revision)}`;
 
     return this.client.generateObject("code", prompt, CodeStageOutputSchema);
   }
 
-  private async runCopyStage(question: string, outline: Outline): Promise<CopyStageOutput> {
+  private async runCopyStage(
+    question: string,
+    outline: Outline,
+    revision?: string,
+  ): Promise<CopyStageOutput> {
     const templateId: TemplateId = outline.templateId;
     const stepSummary = outline.steps.map((s, i) => `Step ${i}: ${s.text}`).join("\n");
 
@@ -189,7 +197,7 @@ Write:
 - socialCaption: Instagram/Facebook caption with emoji (~25 words)
 - hashtags: 5–8 relevant hashtags (no # prefix)
 - coverSpec: title (short, bold) and optional subtitle
-- mascotCues: mascot animation states mapped to steps. Use atStep:-1 for intro, atStep equal to the last step index for outro. Valid states: idle, talking, intro, outro, happy, excited, sad, shy, cry, sleep, damage. Use "excited" at the payoff beat, "damage" for fix-this-error problems, "intro" at start, "outro" at end, "talking" for normal beats, "happy" for success moments.`;
+- mascotCues: mascot animation states mapped to steps. Use atStep:-1 for intro, atStep equal to the last step index for outro. Valid states: idle, talking, intro, outro, happy, excited, sad, shy, cry, sleep, damage. Use "excited" at the payoff beat, "damage" for fix-this-error problems, "intro" at start, "outro" at end, "talking" for normal beats, "happy" for success moments.${this.reviseSuffix(revision)}`;
 
     return this.client.generateObject("copy", prompt, CopyStageOutputSchema);
   }
