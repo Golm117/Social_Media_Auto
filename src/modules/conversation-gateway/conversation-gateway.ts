@@ -17,6 +17,8 @@ export interface ConversationGateway {
   /** Handler returns the text reply for the /queue command. */
   onQueueRequest(handler: QueueRequestHandler): void;
   notify(job: Job, message: string): Promise<void>;
+  /** Operator-level message not tied to a specific job (e.g. the daily auto-topic notice). */
+  announce(message: string): Promise<void>;
   sendDraftForApproval(job: Job): Promise<void>;
   /** A notify with action buttons, for messages the operator must respond to. */
   sendActionPrompt(job: Job, message: string, actions: OperatorAction[]): Promise<void>;
@@ -59,6 +61,10 @@ export class TelegramGateway implements ConversationGateway {
   }
 
   async notify(_job: Job, message: string): Promise<void> {
+    await this.bot.api.sendMessage(this.operatorChatId, message);
+  }
+
+  async announce(message: string): Promise<void> {
     await this.bot.api.sendMessage(this.operatorChatId, message);
   }
 

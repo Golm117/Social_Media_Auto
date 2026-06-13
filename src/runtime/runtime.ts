@@ -16,6 +16,7 @@ import {
   composeCaption,
 } from "../modules/publisher/index.js";
 import type { Scheduler, SchedulerConfig } from "../modules/scheduler/index.js";
+import type { TopicSource } from "../modules/topic-source/index.js";
 import type { VideoComposer } from "../modules/video-composer/index.js";
 import type { VoiceSynthesizer } from "../modules/voice-synthesizer/index.js";
 
@@ -30,6 +31,10 @@ export interface RuntimeDeps {
   gateway: ConversationGateway;
   scheduler: Scheduler;
   schedulerConfig: SchedulerConfig;
+  /** Optional auto-topic source for the daily auto-draft (e.g. Stack Overflow). */
+  topicSource?: TopicSource;
+  /** Languages the auto-topic rotates through, one per day. */
+  autoTopicLanguages?: string[];
   outputDir: string;
   mascotSheetPath: string;
   /** Optional background-music file, mixed quietly under the voiceover. */
@@ -110,7 +115,7 @@ export class Runtime {
     return lines.length > 0 ? lines.join("\n") : "🗓 Queue is empty — nothing scheduled.";
   }
 
-  async submitQuestion(question: string): Promise<JobId> {
+  async submitQuestion(question: string, opts?: { topicId?: string }): Promise<JobId> {
     const ts = this.deps.now().toISOString();
     const job: Job = {
       id: randomUUID(),
@@ -118,10 +123,47 @@ export class Runtime {
       state: "draft",
       createdAt: ts,
       updatedAt: ts,
+      ...(opts?.topicId ? { topicId: opts.topicId } : {}),
     };
     this.deps.store.save(job);
     await this.dispatch(job.id, { type: "QuestionSubmitted" });
     return job.id;
+  }
+
+  /**
+   * Daily auto-draft: pick a fresh top topic for the day's rotating language and run it
+   * through the full pipeline. The finished video lands in Telegram with the usual
+   * Approve buttons — the operator still approves every post (one tap).
+   */
+  async autoTopic(): Promise<void> {
+    const source = this.deps.topicSource;
+    const languages = this.deps.autoTopicLanguages ?? [];
+    if (!source || languages.length === 0) return;
+
+    const dayIndex = Math.floor(this.deps.now().getTime() / 86_400_000);
+    const language = languages[dayIndex % languages.length] as string;
+    const usedTopicIds = this.deps.store
+      .listAll()
+      .map((j) => j.topicId)
+      .filter((id): id is string => id !== undefined);
+
+    let topic: Awaited<ReturnType<TopicSource["nextTopic"]>>;
+    try {
+      topic = await source.nextTopic(language, usedTopicIds);
+    } catch (e) {
+      await this.deps.gateway.announce(`⚠️ Auto-topic (${language}) lookup failed: ${String(e)}`);
+      return;
+    }
+    if (!topic) {
+      await this.deps.gateway.announce(
+        `ℹ️ No fresh ${language} topic today — skipping the auto draft.`,
+      );
+      return;
+    }
+    await this.deps.gateway.announce(
+      `🤖 Auto-topic (${language}): "${topic.question}" — drafting…`,
+    );
+    await this.submitQuestion(topic.question, { topicId: topic.id });
   }
 
   // State-aware + idempotent: a stale/duplicate button tap is ignored rather than

@@ -29,6 +29,8 @@ export interface Job {
   scheduledFor?: string;
   /** Last operator revise instruction, applied on the next regeneration. */
   lastRevision?: string;
+  /** Source topic id when auto-generated (e.g. a Stack Overflow question id); deduped on it. */
+  topicId?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -19,6 +19,7 @@ import {
   type Publisher,
 } from "../modules/publisher/index.js";
 import { DefaultScheduler, type SchedulerConfig } from "../modules/scheduler/index.js";
+import type { Topic, TopicSource } from "../modules/topic-source/index.js";
 import type { VideoComposer } from "../modules/video-composer/index.js";
 import type { VoiceSynthesizer } from "../modules/voice-synthesizer/index.js";
 import { Runtime, type RuntimeDeps } from "./runtime.js";
@@ -41,6 +42,7 @@ function makeScript(withCode = true): ScriptPackage {
 
 class RecordingGateway implements ConversationGateway {
   notifications: string[] = [];
+  announcements: string[] = [];
   drafts: string[] = [];
   prompts: Array<{ jobId: string; message: string; actions: OperatorAction[] }> = [];
   qh: QuestionHandler = () => {};
@@ -53,6 +55,9 @@ class RecordingGateway implements ConversationGateway {
   }
   async notify(_job: Job, message: string) {
     this.notifications.push(message);
+  }
+  async announce(message: string) {
+    this.announcements.push(message);
   }
   async sendDraftForApproval(job: Job) {
     this.drafts.push(job.id);
@@ -69,6 +74,8 @@ class RecordingGateway implements ConversationGateway {
 function makeRuntime<P extends Publisher = MockPublisher>(overrides?: {
   verifier?: CodeVerifier;
   publisher?: P;
+  topicSource?: TopicSource;
+  autoTopicLanguages?: string[];
 }) {
   const store = new SqliteJobStore(":memory:");
   const gateway = new RecordingGateway();
@@ -99,6 +106,8 @@ function makeRuntime<P extends Publisher = MockPublisher>(overrides?: {
     gateway,
     scheduler: new DefaultScheduler(),
     schedulerConfig,
+    ...(overrides?.topicSource ? { topicSource: overrides.topicSource } : {}),
+    ...(overrides?.autoTopicLanguages ? { autoTopicLanguages: overrides.autoTopicLanguages } : {}),
     outputDir: "/tmp",
     mascotSheetPath: "sheet.png",
     publishTargets: ["instagram", "facebook"],
@@ -309,6 +318,61 @@ describe("Runtime — publish failure handling", () => {
     expect(store.get(id)?.scheduledFor).toBeUndefined();
     const prompt = gateway.prompts.find((p) => p.message.includes("Publish failed"));
     expect(prompt?.actions).toEqual(["postNow", "reject"]);
+  });
+});
+
+class FakeTopicSource implements TopicSource {
+  calls: Array<{ language: string; excludeIds: string[] }> = [];
+  constructor(private readonly topic: Topic | null) {}
+  async nextTopic(language: string, excludeIds: string[]): Promise<Topic | null> {
+    this.calls.push({ language, excludeIds });
+    return this.topic;
+  }
+}
+
+describe("Runtime — daily auto-topic", () => {
+  it("drafts the fetched topic through the pipeline to review (one-tap approve)", async () => {
+    const source = new FakeTopicSource({ id: "so-42", question: "What is a closure?" });
+    const { runtime, store, gateway } = makeRuntime({
+      topicSource: source,
+      autoTopicLanguages: ["javascript"],
+    });
+    await runtime.autoTopic();
+
+    // a job was created from the topic, ran the pipeline, and is waiting for approval
+    const job = store.listByState("review")[0];
+    expect(job?.question).toBe("What is a closure?");
+    expect(job?.topicId).toBe("so-42");
+    expect(gateway.drafts).toContain(job?.id);
+    expect(gateway.announcements.some((a) => a.includes("Auto-topic"))).toBe(true);
+  });
+
+  it("excludes already-used topic ids so it never drafts the same question twice", async () => {
+    const source = new FakeTopicSource({ id: "so-99", question: "How does async work?" });
+    const { runtime } = makeRuntime({ topicSource: source, autoTopicLanguages: ["python"] });
+    // seed a prior job that already used so-7
+    await runtime.submitQuestion("old one", { topicId: "so-7" });
+
+    await runtime.autoTopic();
+    expect(source.calls[0]?.language).toBe("python");
+    expect(source.calls[0]?.excludeIds).toContain("so-7");
+  });
+
+  it("announces and skips cleanly when no fresh topic is available", async () => {
+    const source = new FakeTopicSource(null);
+    const { runtime, store, gateway } = makeRuntime({
+      topicSource: source,
+      autoTopicLanguages: ["go"],
+    });
+    await runtime.autoTopic();
+    expect(store.listByState("review")).toHaveLength(0);
+    expect(gateway.announcements.some((a) => a.includes("No fresh"))).toBe(true);
+  });
+
+  it("does nothing when auto-topic is not configured", async () => {
+    const { runtime, gateway } = makeRuntime();
+    await runtime.autoTopic();
+    expect(gateway.announcements).toHaveLength(0);
   });
 });
 

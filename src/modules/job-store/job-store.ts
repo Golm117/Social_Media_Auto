@@ -5,6 +5,7 @@ export interface JobStore {
   get(id: JobId): Job | undefined;
   save(job: Job): void;
   listByState(state: JobState): Job[];
+  listAll(): Job[];
 }
 
 const CREATE_TABLE = `
@@ -67,6 +68,11 @@ export class SqliteJobStore implements JobStore {
     const rows = this.db
       .prepare<[string], { data: string }>("SELECT data FROM jobs WHERE state = ?")
       .all(state);
+    return rows.map((r) => JSON.parse(r.data) as Job);
+  }
+
+  listAll(): Job[] {
+    const rows = this.db.prepare<[], { data: string }>("SELECT data FROM jobs").all();
     return rows.map((r) => JSON.parse(r.data) as Job);
   }
 

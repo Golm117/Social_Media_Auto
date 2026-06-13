@@ -104,3 +104,5 @@ export type {
 export { MockPublisher, allPublished } from "./modules/publisher/index.js";
 export type { SchedulerConfig, Scheduler } from "./modules/scheduler/index.js";
 export { DefaultScheduler } from "./modules/scheduler/index.js";
+export type { Topic, TopicSource, StackOverflowConfig } from "./modules/topic-source/index.js";
+export { StackOverflowTopicSource, decodeEntities } from "./modules/topic-source/index.js";

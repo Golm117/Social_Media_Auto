@@ -49,6 +49,12 @@ export interface AppConfig {
   scheduleSlots: string[];
   scheduleTimeZone: string;
   useMockPublisher: boolean;
+  /** Languages the daily auto-topic rotates through (empty = auto-topic disabled). */
+  autoTopicLanguages: string[];
+  /** Local time (HH:MM in scheduleTimeZone) to generate the daily auto-draft. */
+  autoTopicHour: string;
+  /** Optional StackExchange API key (lifts the auto-topic lookup quota). */
+  stackOverflowApiKey: string;
 }
 
 export function loadConfig(envPath = ".env"): AppConfig {
@@ -87,5 +93,11 @@ export function loadConfig(envPath = ".env"): AppConfig {
     scheduleTimeZone: e.SCHEDULE_TZ ?? "America/Toronto",
     // default true: approving won't hit real socials until you flip this off
     useMockPublisher: (e.USE_MOCK_PUBLISHER ?? "true").toLowerCase() !== "false",
+    autoTopicLanguages: (e.AUTO_TOPIC_LANGUAGES ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    autoTopicHour: e.AUTO_TOPIC_HOUR ?? "09:00",
+    stackOverflowApiKey: e.STACKOVERFLOW_API_KEY ?? "",
   };
 }
