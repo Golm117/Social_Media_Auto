@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CodeLanguage, SandboxRunResult } from "./code-verifier.js";
-import { DefaultCodeVerifier, allPassed, failureSummaries } from "./code-verifier.js";
+import { DefaultCodeVerifier, allPassed, failureSummaries, stripTypes } from "./code-verifier.js";
 import type { Sandbox } from "./code-verifier.js";
 
 // ─── MockSandbox ─────────────────────────────────────────────────────────────
@@ -117,6 +117,26 @@ describe("DefaultCodeVerifier — empty input", () => {
 
     expect(result).toEqual([]);
     expect(sandbox.calls).toHaveLength(0);
+  });
+});
+
+describe("stripTypes — TypeScript → runnable JS", () => {
+  it("removes type annotations so older Node can run it without tsx", () => {
+    const js = stripTypes("const x: number = 41;\nconsole.log('ts-ran', x + 1);");
+    // the annotation is gone, the runnable logic survives
+    expect(js).not.toContain(": number");
+    expect(js).toContain("console.log");
+    expect(js).toContain("x + 1");
+  });
+
+  it("strips an interface + typed function down to plain JS", () => {
+    const js = stripTypes(
+      "interface P { n: string }\nfunction hi(p: P): string { return `hi ${p.n}`; }\nconsole.log(hi({ n: 'x' }));",
+    );
+    expect(js).not.toContain("interface");
+    expect(js).not.toContain(": string");
+    expect(js).not.toContain(": P");
+    expect(js).toContain("function hi(p)");
   });
 });
 

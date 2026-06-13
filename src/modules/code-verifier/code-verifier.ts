@@ -1,4 +1,5 @@
 import { Sandbox as E2BSandboxBase } from "e2b";
+import ts from "typescript";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -65,35 +66,60 @@ export function failureSummaries(result: VerificationResult): string[] {
     .map((item) => `Snippet ${item.snippetIndex}: ${item.stderr || "non-zero exit"}`);
 }
 
-// ─── E2BSandbox (real adapter — NOT network-tested in this slice) ────────────
-// Validate end-to-end when E2B_API_KEY is wired in a later integration pass.
-// TypeScript execution requires npx/tsx available in the sandbox base image.
+// ─── E2BSandbox (real adapter) ───────────────────────────────────────────────
+// The E2B `base` image ships Node 20 (can't run .ts) and no tsx, and we run with
+// internet disabled — so `npx tsx` can neither find nor fetch tsx and hangs until
+// E2B's request deadline fires. Instead we strip TypeScript types locally and run
+// the resulting JS with plain `node`; the sandbox only ever executes JS + Python.
 
-const FILE_EXT: Record<CodeLanguage, string> = {
-  python: "py",
-  javascript: "mjs",
-  typescript: "ts",
-};
+/** Fail fast rather than hang to E2B's deadline if provisioning or a run stalls. */
+const SANDBOX_REQUEST_TIMEOUT_MS = 30_000;
+const COMMAND_TIMEOUT_MS = 30_000;
 
-const RUNNER_CMD: Record<CodeLanguage, (path: string) => string> = {
-  python: (p) => `python3 ${p}`,
-  javascript: (p) => `node ${p}`,
-  typescript: (p) => `npx --yes tsx ${p}`,
-};
+/** Strip TS types → JS so the sandbox's older Node can run it without tsx/network. */
+export function stripTypes(code: string): string {
+  return ts.transpileModule(code, {
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ESNext,
+    },
+  }).outputText;
+}
+
+interface PreparedRun {
+  ext: string;
+  contents: string;
+  command: (path: string) => string;
+}
+
+function prepareRun(language: CodeLanguage, code: string): PreparedRun {
+  switch (language) {
+    case "python":
+      return { ext: "py", contents: code, command: (p) => `python3 ${p}` };
+    case "javascript":
+      return { ext: "mjs", contents: code, command: (p) => `node ${p}` };
+    case "typescript":
+      return { ext: "mjs", contents: stripTypes(code), command: (p) => `node ${p}` };
+  }
+}
 
 export class E2BSandbox implements Sandbox {
   constructor(private readonly config: { apiKey: string }) {}
 
   async run(language: CodeLanguage, code: string): Promise<SandboxRunResult> {
+    const { ext, contents, command } = prepareRun(language, code);
     const sbx = await E2BSandboxBase.create({
       apiKey: this.config.apiKey,
       allowInternetAccess: false,
+      requestTimeoutMs: SANDBOX_REQUEST_TIMEOUT_MS,
     });
     try {
-      const tmpPath = `/tmp/snippet.${FILE_EXT[language]}`;
-      await sbx.files.write(tmpPath, code);
+      const tmpPath = `/tmp/snippet.${ext}`;
+      await sbx.files.write(tmpPath, contents);
       try {
-        const result = await sbx.commands.run(RUNNER_CMD[language](tmpPath));
+        const result = await sbx.commands.run(command(tmpPath), {
+          timeoutMs: COMMAND_TIMEOUT_MS,
+        });
         return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr };
       } catch (err) {
         // E2B throws CommandExitError on non-zero exit — that's a verification

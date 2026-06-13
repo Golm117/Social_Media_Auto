@@ -332,7 +332,14 @@ export class Runtime {
               failures: failureSummaries(res),
             });
         } catch (e) {
-          await fail("verifying", e);
+          // A thrown error here means the sandbox couldn't run the check (e.g. an
+          // E2B timeout), NOT that the code is wrong. Degrade into the actionable
+          // review prompt (Revise/Reject) rather than killing the job with a
+          // generic error — this keeps an unattended daily auto-topic run alive.
+          await this.dispatch(job.id, {
+            type: "CodeVerificationFailed",
+            failures: [`Couldn't run the sandbox check: ${String(e)}`],
+          });
         }
         return;
       }

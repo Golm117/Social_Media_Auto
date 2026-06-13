@@ -153,6 +153,22 @@ describe("Runtime", () => {
     expect(gateway.drafts).toHaveLength(0);
   });
 
+  it("a sandbox error during verification degrades to review (Revise/Reject), not a dead job", async () => {
+    const verifier: CodeVerifier = {
+      verify: async () => {
+        throw new Error("[deadline_exceeded] the operation timed out");
+      },
+    };
+    const { runtime, store, gateway } = makeRuntime({ verifier });
+    const id = await runtime.submitQuestion("q");
+    // the job survives as actionable review, not terminal "failed"
+    expect(store.get(id)?.state).toBe("review");
+    const prompt = gateway.prompts.find((p) => p.jobId === id);
+    expect(prompt?.actions).toEqual(["revise", "reject"]);
+    // and it does NOT surface the generic crash message
+    expect(gateway.notifications.some((n) => n.includes("Something went wrong"))).toBe(false);
+  });
+
   it("reject moves the job to 'rejected'", async () => {
     const { runtime, store } = makeRuntime();
     const id = await runtime.submitQuestion("q");
