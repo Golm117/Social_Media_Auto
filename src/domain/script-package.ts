@@ -30,7 +30,9 @@ const BodyStepSchema = z
   .object({
     text: z.string(),
     code: z.string().optional(),
-    language: z.enum(["javascript", "typescript", "python"]).optional(),
+    // Snippet/display languages. js/ts/python/sql are sandbox-verified; css is
+    // display-only (shown on screen, not executed) — see code-verifier.
+    language: z.enum(["javascript", "typescript", "python", "sql", "css"]).optional(),
   })
   .refine((step) => step.code === undefined || step.language !== undefined, {
     message: "language is required when code is present",

@@ -18,10 +18,13 @@ export * from "./coddy-props.js";
 
 const SHIKI_THEME = "dracula";
 
+const HIGHLIGHT_LANGS = ["javascript", "typescript", "python", "sql", "css"] as const;
+type HighlightLang = (typeof HIGHLIGHT_LANGS)[number];
+
 async function highlight(code: string, lang: string): Promise<HighlightedLine[]> {
-  const safeLang = ["javascript", "typescript", "python"].includes(lang) ? lang : "text";
+  const safeLang = (HIGHLIGHT_LANGS as readonly string[]).includes(lang) ? lang : "text";
   const { tokens } = await codeToTokens(code, {
-    lang: safeLang as "javascript" | "typescript" | "python",
+    lang: safeLang as HighlightLang,
     theme: SHIKI_THEME,
   });
   return tokens.map((line) =>

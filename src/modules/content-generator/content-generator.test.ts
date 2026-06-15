@@ -183,6 +183,55 @@ describe("DefaultContentGenerator — role routing", () => {
   });
 });
 
+describe("DefaultContentGenerator — language hint", () => {
+  const GLUE_SQL = {
+    templateId: "60-second-concept",
+    steps: [{ text: "Group rows by department", needsCode: true, language: "sql" }],
+  };
+  const CODE_SQL = {
+    snippets: [
+      {
+        stepIndex: 0,
+        code: "CREATE TABLE u(d TEXT);\nINSERT INTO u VALUES('eng');\nSELECT d FROM u;",
+        language: "sql",
+      },
+    ],
+  };
+
+  it("binds the snippet language to the topic hint in both the glue and code prompts", async () => {
+    const client = new MockModelClient({ glue: GLUE_SQL, code: CODE_SQL, copy: COPY_OUTPUT });
+    const gen = new DefaultContentGenerator(client);
+    await gen.generate("How do I GROUP BY?", { language: "sql" });
+
+    const glue = client.calls.find((c) => c.role === "glue")?.prompt ?? "";
+    const code = client.calls.find((c) => c.role === "code")?.prompt ?? "";
+    expect(glue).toContain("This topic is about sql");
+    expect(code).toContain("This topic is about sql");
+    // the per-language run rule for sql is surfaced to the code model
+    expect(code).toContain("in-memory SQLite");
+  });
+
+  it("carries a sql snippet through assembly into the ScriptPackage", async () => {
+    const client = new MockModelClient({ glue: GLUE_SQL, code: CODE_SQL, copy: COPY_OUTPUT });
+    const gen = new DefaultContentGenerator(client);
+    const result = await gen.generate("How do I GROUP BY?", { language: "sql" });
+    const coded = result.bodySteps.find((s) => s.code);
+    expect(coded?.language).toBe("sql");
+  });
+
+  it("omits the binding directive when no language hint is given", async () => {
+    const client = new MockModelClient({
+      glue: GLUE_WITH_CODE,
+      code: CODE_OUTPUT,
+      copy: COPY_OUTPUT,
+    });
+    const gen = new DefaultContentGenerator(client);
+    await gen.generate("What is a closure?");
+    const glue = client.calls.find((c) => c.role === "glue")?.prompt ?? "";
+    expect(glue).not.toContain("This topic is about");
+  });
+});
+
 describe("DefaultContentGenerator — malformed assembly", () => {
   it("rejects when copy stage omits a required field (socialCaption)", async () => {
     const badCopy = { ...COPY_OUTPUT };

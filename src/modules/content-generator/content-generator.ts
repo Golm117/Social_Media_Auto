@@ -26,8 +26,15 @@ export interface ModelClient {
 
 // ─── ContentGenerator interface ────────────────────────────────────────────
 
+export interface GenerateOptions {
+  /** Topic language hint (e.g. the auto-topic rotation tag) — steers snippet language. */
+  language?: string;
+  /** Operator revise instruction, applied on regeneration. */
+  revision?: string;
+}
+
 export interface ContentGenerator {
-  generate(question: string, revision?: string): Promise<ScriptPackage>;
+  generate(question: string, opts?: GenerateOptions): Promise<ScriptPackage>;
 }
 
 // ─── Default routing config ────────────────────────────────────────────────
@@ -63,7 +70,18 @@ export class OpenRouterModelClient implements ModelClient {
 
 // ─── Pipeline schemas ──────────────────────────────────────────────────────
 
-const CodeLanguageSchema = z.enum(["javascript", "typescript", "python"]);
+const CodeLanguageSchema = z.enum(["javascript", "typescript", "python", "sql", "css"]);
+type SnippetLanguage = z.infer<typeof CodeLanguageSchema>;
+
+// Per-language rule injected into the code-stage prompt. js/ts/python/sql are
+// executed in a sandbox; css is shown on screen only.
+const RUN_RULE: Record<SnippetLanguage, string> = {
+  javascript: "runs with ZERO errors via `node`; END with a console.log that prints the result.",
+  typescript: "runs with ZERO errors via `node` (types are stripped); END with a console.log.",
+  python: "runs with ZERO errors via `python3`; END with a print() that shows the result.",
+  sql: "runs against an in-memory SQLite database — be self-contained: CREATE TABLE, INSERT a few sample rows, then END with a SELECT that returns rows. Use only SQLite-compatible syntax.",
+  css: "is shown on screen only (NOT executed) — write valid, self-contained CSS that illustrates the concept. No run/print needed.",
+};
 
 const OutlineSchema = z.object({
   templateId: TemplateIdSchema,
@@ -114,9 +132,11 @@ type CopyStageOutput = z.infer<typeof CopyStageOutputSchema>;
 export class DefaultContentGenerator implements ContentGenerator {
   constructor(private readonly client: ModelClient) {}
 
-  async generate(question: string, revision?: string): Promise<ScriptPackage> {
-    const outline = await this.runGlueStage(question, revision);
-    const codeOutput = await this.runCodeStage(outline, revision);
+  async generate(question: string, opts?: GenerateOptions): Promise<ScriptPackage> {
+    const language = opts?.language?.trim().toLowerCase() || undefined;
+    const revision = opts?.revision;
+    const outline = await this.runGlueStage(question, language, revision);
+    const codeOutput = await this.runCodeStage(outline, language, revision);
     const copy = await this.runCopyStage(question, outline, revision);
     return this.assemble(outline, codeOutput, copy);
   }
@@ -127,7 +147,17 @@ export class DefaultContentGenerator implements ContentGenerator {
       : "";
   }
 
-  private async runGlueStage(question: string, revision?: string): Promise<Outline> {
+  /** Instruction binding snippet language to the topic, when a hint is known. */
+  private languageDirective(language?: string): string {
+    if (!language) return "";
+    return `\n\nThis topic is about ${language}. Every code snippet in this video MUST use language: ${language} — do not switch languages.`;
+  }
+
+  private async runGlueStage(
+    question: string,
+    language?: string,
+    revision?: string,
+  ): Promise<Outline> {
     const prompt = `You are a concise technical content planner.
 
 Given the developer question below, select the best template and outline the answer as a short-form video script.
@@ -144,12 +174,16 @@ Question: ${question}
 Return a templateId and an array of steps (2–5 steps). For each step include:
 - text: the spoken beat for that step
 - needsCode: true if showing a code snippet would help
-- language: (only when needsCode is true) one of javascript, typescript, python${this.reviseSuffix(revision)}`;
+- language: (only when needsCode is true) one of javascript, typescript, python, sql, css${this.languageDirective(language)}${this.reviseSuffix(revision)}`;
 
     return this.client.generateObject("glue", prompt, OutlineSchema);
   }
 
-  private async runCodeStage(outline: Outline, revision?: string): Promise<CodeStageOutput | null> {
+  private async runCodeStage(
+    outline: Outline,
+    language?: string,
+    revision?: string,
+  ): Promise<CodeStageOutput | null> {
     const codeSteps = outline.steps
       .map((step, index) => ({ ...step, index }))
       .filter((step) => step.needsCode);
@@ -157,20 +191,29 @@ Return a templateId and an array of steps (2–5 steps). For each step include:
     if (codeSteps.length === 0) return null;
 
     const stepDescriptions = codeSteps
-      .map((s) => `Step ${s.index} (${s.language ?? "javascript"}): ${s.text}`)
+      .map((s) => `Step ${s.index} (${s.language ?? language ?? "javascript"}): ${s.text}`)
       .join("\n");
 
-    const prompt = `You are an expert coding educator writing code snippets for a short-form video. Each snippet is EXECUTED in a sandbox to verify it works, so it MUST be COMPLETE and SELF-CONTAINED.
+    // Only surface the rules for languages actually in play, led by the topic hint.
+    const langsInPlay = new Set<SnippetLanguage>(
+      codeSteps.map((s) => s.language).filter((l): l is SnippetLanguage => l != null),
+    );
+    if (language && language in RUN_RULE) langsInPlay.add(language as SnippetLanguage);
+    if (langsInPlay.size === 0) langsInPlay.add("javascript");
+    const ruleLines = [...langsInPlay].map((l) => `- ${l}: it ${RUN_RULE[l]}`).join("\n");
+
+    const prompt = `You are an expert coding educator writing code snippets for a short-form video. Each snippet MUST be COMPLETE and SELF-CONTAINED. js/ts/python/sql snippets are EXECUTED in a sandbox to verify they work; css is shown on screen only.
+
+Per-language rules:
+${ruleLines}
 
 Hard rules for EVERY snippet:
-- It must run with ZERO errors via \`node\` (javascript/typescript) or \`python3\` (python).
 - Define ALL sample data and variables it uses — never reference an undefined symbol (e.g. don't use a bare \`user\` without first defining it).
-- End with a console.log / print that demonstrates the result, so running it produces visible output.
-- Prioritise being runnable over being short (aim under ~18 lines, but correctness first).
+- Prioritise being correct/runnable over being short (aim under ~18 lines, but correctness first).
 
 ${stepDescriptions}
 
-Return snippets array with: stepIndex (the original step index), code (the COMPLETE runnable snippet), language.${this.reviseSuffix(revision)}`;
+Return snippets array with: stepIndex (the original step index), code (the COMPLETE snippet), language.${this.languageDirective(language)}${this.reviseSuffix(revision)}`;
 
     return this.client.generateObject("code", prompt, CodeStageOutputSchema);
   }
@@ -207,10 +250,7 @@ Write:
     codeOutput: CodeStageOutput | null,
     copy: CopyStageOutput,
   ): ScriptPackage {
-    const snippetMap = new Map<
-      number,
-      { code: string; language: "javascript" | "typescript" | "python" }
-    >();
+    const snippetMap = new Map<number, { code: string; language: SnippetLanguage }>();
     if (codeOutput) {
       for (const snippet of codeOutput.snippets) {
         snippetMap.set(snippet.stepIndex, {

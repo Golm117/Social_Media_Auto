@@ -31,6 +31,8 @@ export interface Job {
   lastRevision?: string;
   /** Source topic id when auto-generated (e.g. a Stack Overflow question id); deduped on it. */
   topicId?: string;
+  /** Topic language hint (the auto-topic rotation tag) — steers the draft's snippet language. */
+  language?: string;
   createdAt: string;
   updatedAt: string;
 }

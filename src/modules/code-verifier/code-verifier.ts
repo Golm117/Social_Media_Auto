@@ -3,7 +3,16 @@ import ts from "typescript";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export type CodeLanguage = "javascript" | "typescript" | "python";
+/** Languages the sandbox can actually execute to verify. css is NOT here — it is
+ *  display-only and never reaches the verifier (the runtime filters it out). */
+export type CodeLanguage = "javascript" | "typescript" | "python" | "sql";
+
+const RUNNABLE_LANGUAGES = new Set<string>(["javascript", "typescript", "python", "sql"]);
+
+/** True when a snippet language can be run in the sandbox (excludes display-only css). */
+export function isRunnableLanguage(language: string): language is CodeLanguage {
+  return RUNNABLE_LANGUAGES.has(language);
+}
 
 export interface SandboxRunResult {
   exitCode: number;
@@ -86,6 +95,32 @@ export function stripTypes(code: string): string {
   }).outputText;
 }
 
+/** The base image has no `sqlite3` CLI, but Python's `sqlite3` module is present.
+ *  Wrap the SQL in a Python harness that runs each statement against an in-memory
+ *  DB and prints rows from any that return them. The SQL is base64-embedded to
+ *  sidestep all shell/quote escaping; a SQL error raises → non-zero exit. */
+export function sqlRunner(code: string): string {
+  const b64 = Buffer.from(code, "utf8").toString("base64");
+  return `import sqlite3, base64
+sql = base64.b64decode("${b64}").decode("utf-8")
+cur = sqlite3.connect(":memory:").cursor()
+buf = ""
+def run(stmt):
+    s = stmt.strip()
+    if not s:
+        return
+    cur.execute(s)
+    for r in cur.fetchall():
+        print("|".join(str(c) for c in r))
+for line in sql.splitlines(keepends=True):
+    buf += line
+    if sqlite3.complete_statement(buf):
+        run(buf)
+        buf = ""
+run(buf)
+`;
+}
+
 interface PreparedRun {
   ext: string;
   contents: string;
@@ -100,6 +135,8 @@ function prepareRun(language: CodeLanguage, code: string): PreparedRun {
       return { ext: "mjs", contents: code, command: (p) => `node ${p}` };
     case "typescript":
       return { ext: "mjs", contents: stripTypes(code), command: (p) => `node ${p}` };
+    case "sql":
+      return { ext: "py", contents: sqlRunner(code), command: (p) => `python3 ${p}` };
   }
 }
 

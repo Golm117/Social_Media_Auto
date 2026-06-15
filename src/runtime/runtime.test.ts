@@ -76,11 +76,14 @@ function makeRuntime<P extends Publisher = MockPublisher>(overrides?: {
   publisher?: P;
   topicSource?: TopicSource;
   autoTopicLanguages?: string[];
+  contentGenerator?: ContentGenerator;
 }) {
   const store = new SqliteJobStore(":memory:");
   const gateway = new RecordingGateway();
   const publisher = (overrides?.publisher ?? new MockPublisher()) as P;
-  const contentGenerator: ContentGenerator = { generate: async () => makeScript() };
+  const contentGenerator: ContentGenerator = overrides?.contentGenerator ?? {
+    generate: async () => makeScript(),
+  };
   const codeVerifier: CodeVerifier =
     overrides?.verifier ??
     ({
@@ -361,6 +364,49 @@ describe("Runtime — daily auto-topic", () => {
     expect(job?.topicId).toBe("so-42");
     expect(gateway.drafts).toContain(job?.id);
     expect(gateway.announcements.some((a) => a.includes("Auto-topic"))).toBe(true);
+  });
+
+  it("threads the rotation language into the draft so the generator drafts in that language", async () => {
+    const seen: Array<{ language?: string }> = [];
+    const contentGenerator: ContentGenerator = {
+      generate: async (_q, opts) => {
+        seen.push({ ...(opts?.language ? { language: opts.language } : {}) });
+        return makeScript();
+      },
+    };
+    const source = new FakeTopicSource({ id: "so-7", question: "How do I GROUP BY in SQL?" });
+    const { runtime, store } = makeRuntime({
+      topicSource: source,
+      autoTopicLanguages: ["sql"],
+      contentGenerator,
+    });
+    await runtime.autoTopic();
+    expect(store.listByState("review")[0]?.language).toBe("sql");
+    expect(seen[0]?.language).toBe("sql");
+  });
+
+  it("does not send display-only css snippets to the sandbox verifier", async () => {
+    const verified: string[] = [];
+    const verifier: CodeVerifier = {
+      verify: async (s) => {
+        verified.push(...s.map((x) => x.language));
+        return s.map((_, i) => ({ snippetIndex: i, ok: true, stdout: "", stderr: "" }));
+      },
+    };
+    const cssAndJs: ContentGenerator = {
+      generate: async () => ({
+        ...makeScript(),
+        bodySteps: [
+          { text: "the rule", code: ".box { color: red; }", language: "css" },
+          { text: "toggle it", code: "console.log(1)", language: "javascript" },
+        ],
+      }),
+    };
+    const { runtime, store } = makeRuntime({ verifier, contentGenerator: cssAndJs });
+    const id = await runtime.submitQuestion("How do I center a div?");
+    // css was shown but skipped; only the runnable js snippet hit the sandbox
+    expect(verified).toEqual(["javascript"]);
+    expect(store.get(id)?.state).toBe("review");
   });
 
   it("excludes already-used topic ids so it never drafts the same question twice", async () => {

@@ -2,7 +2,13 @@ import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Job, JobId, JobState } from "../domain/job.js";
-import { type CodeVerifier, allPassed, failureSummaries } from "../modules/code-verifier/index.js";
+import {
+  type CodeLanguage,
+  type CodeVerifier,
+  allPassed,
+  failureSummaries,
+  isRunnableLanguage,
+} from "../modules/code-verifier/index.js";
 import type { ContentGenerator } from "../modules/content-generator/index.js";
 import type { ConversationGateway, OperatorAction } from "../modules/conversation-gateway/index.js";
 import { type Intent, type JobEvent, advance } from "../modules/job-orchestrator/index.js";
@@ -115,7 +121,10 @@ export class Runtime {
     return lines.length > 0 ? lines.join("\n") : "🗓 Queue is empty — nothing scheduled.";
   }
 
-  async submitQuestion(question: string, opts?: { topicId?: string }): Promise<JobId> {
+  async submitQuestion(
+    question: string,
+    opts?: { topicId?: string; language?: string },
+  ): Promise<JobId> {
     const ts = this.deps.now().toISOString();
     const job: Job = {
       id: randomUUID(),
@@ -124,6 +133,7 @@ export class Runtime {
       createdAt: ts,
       updatedAt: ts,
       ...(opts?.topicId ? { topicId: opts.topicId } : {}),
+      ...(opts?.language ? { language: opts.language } : {}),
     };
     this.deps.store.save(job);
     await this.dispatch(job.id, { type: "QuestionSubmitted" });
@@ -163,7 +173,7 @@ export class Runtime {
     await this.deps.gateway.announce(
       `🤖 Auto-topic (${language}): "${topic.question}" — drafting…`,
     );
-    await this.submitQuestion(topic.question, { topicId: topic.id });
+    await this.submitQuestion(topic.question, { topicId: topic.id, language });
   }
 
   // State-aware + idempotent: a stale/duplicate button tap is ignored rather than
@@ -308,10 +318,10 @@ export class Runtime {
       }
       case "GenerateContent":
         try {
-          const scriptPackage = await this.deps.contentGenerator.generate(
-            job.question,
-            job.lastRevision,
-          );
+          const scriptPackage = await this.deps.contentGenerator.generate(job.question, {
+            ...(job.language ? { language: job.language } : {}),
+            ...(job.lastRevision ? { revision: job.lastRevision } : {}),
+          });
           await this.dispatch(job.id, { type: "ContentGenerated", scriptPackage });
         } catch (e) {
           await fail("generating", e);
@@ -320,9 +330,11 @@ export class Runtime {
       case "VerifyCode": {
         const sp = job.scriptPackage;
         if (!sp) return;
+        // Only verify snippets in a runnable language — display-only css is shown
+        // on screen but never executed, so it skips the sandbox.
         const snippets = sp.bodySteps
-          .filter((s) => s.code && s.language)
-          .map((s) => ({ code: s.code as string, language: s.language as "javascript" }));
+          .filter((s) => s.code && s.language && isRunnableLanguage(s.language))
+          .map((s) => ({ code: s.code as string, language: s.language as CodeLanguage }));
         try {
           const res = await this.deps.codeVerifier.verify(snippets);
           if (allPassed(res)) await this.dispatch(job.id, { type: "CodeVerified" });

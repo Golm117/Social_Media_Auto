@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { CodeLanguage, SandboxRunResult } from "./code-verifier.js";
-import { DefaultCodeVerifier, allPassed, failureSummaries, stripTypes } from "./code-verifier.js";
+import {
+  DefaultCodeVerifier,
+  allPassed,
+  failureSummaries,
+  isRunnableLanguage,
+  sqlRunner,
+  stripTypes,
+} from "./code-verifier.js";
 import type { Sandbox } from "./code-verifier.js";
 
 // ─── MockSandbox ─────────────────────────────────────────────────────────────
@@ -137,6 +144,31 @@ describe("stripTypes — TypeScript → runnable JS", () => {
     expect(js).not.toContain(": string");
     expect(js).not.toContain(": P");
     expect(js).toContain("function hi(p)");
+  });
+});
+
+describe("isRunnableLanguage — runnable vs display-only", () => {
+  it("treats js/ts/python/sql as runnable", () => {
+    expect(isRunnableLanguage("javascript")).toBe(true);
+    expect(isRunnableLanguage("typescript")).toBe(true);
+    expect(isRunnableLanguage("python")).toBe(true);
+    expect(isRunnableLanguage("sql")).toBe(true);
+  });
+  it("treats css (display-only) and unknown languages as not runnable", () => {
+    expect(isRunnableLanguage("css")).toBe(false);
+    expect(isRunnableLanguage("html")).toBe(false);
+  });
+});
+
+describe("sqlRunner — Python sqlite harness (no sqlite3 CLI in the image)", () => {
+  it("embeds the SQL as base64 and runs it via the stdlib sqlite3 module", () => {
+    const sql = "CREATE TABLE t(n INT); INSERT INTO t VALUES (1); SELECT n FROM t;";
+    const py = sqlRunner(sql);
+    // the SQL never appears raw (no quote/escaping hazard) — it is base64-embedded
+    expect(py).not.toContain("CREATE TABLE");
+    expect(py).toContain(Buffer.from(sql, "utf8").toString("base64"));
+    expect(py).toContain("import sqlite3");
+    expect(py).toContain('sqlite3.connect(":memory:")');
   });
 });
 
