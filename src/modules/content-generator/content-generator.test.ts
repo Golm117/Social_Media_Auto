@@ -181,6 +181,22 @@ describe("DefaultContentGenerator — role routing", () => {
     expect(roles).toContain("code");
     expect(roles).toContain("copy");
   });
+
+  it("instructs the code model that snippets are single-file with no local imports", async () => {
+    const client = new MockModelClient({
+      glue: GLUE_WITH_CODE,
+      code: CODE_OUTPUT,
+      copy: COPY_OUTPUT,
+    });
+    const gen = new DefaultContentGenerator(client);
+    await gen.generate("How do ES modules work?");
+
+    const code = client.calls.find((c) => c.role === "code")?.prompt ?? "";
+    // each snippet runs as one standalone file — guards against the ERR_MODULE_NOT_FOUND
+    // "Cannot find module './math.js'" failure from cross-file imports
+    expect(code).toContain("ONE standalone file");
+    expect(code).toMatch(/NEVER import or require a local/i);
+  });
 });
 
 describe("DefaultContentGenerator — language hint", () => {

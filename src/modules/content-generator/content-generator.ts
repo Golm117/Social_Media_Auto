@@ -208,6 +208,8 @@ Per-language rules:
 ${ruleLines}
 
 Hard rules for EVERY snippet:
+- Each snippet runs as ONE standalone file with NO sibling files. NEVER import or require a local/relative path (no \`import x from "./math.js"\`, no \`require("./utils")\`, no SQL \`.read\`/ATTACH of another file) — that file will not exist and the run fails. Inline everything into this single snippet. Importing language built-ins / the standard library (e.g. \`node:fs\`, Python's \`math\`) is fine.
+- To demonstrate a multi-file idea (modules, imports/exports), show it WITHIN one file — define the "module" code and use it in the same snippet; a \`// in math.js\` comment is fine, an actual cross-file import is not.
 - Define ALL sample data and variables it uses — never reference an undefined symbol (e.g. don't use a bare \`user\` without first defining it).
 - Prioritise being correct/runnable over being short (aim under ~18 lines, but correctness first).
 
