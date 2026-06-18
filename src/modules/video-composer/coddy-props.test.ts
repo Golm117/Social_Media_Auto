@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   type CoddyMascotTrack,
+  END_CARD_FADE_MS,
   activeStepIndex,
   activeWordIndex,
   computeDurationMs,
+  endCardOpacity,
   frameAt,
   segmentAt,
 } from "./coddy-props.js";
@@ -81,6 +83,30 @@ describe("activeWordIndex", () => {
   });
   it("returns -1 outside any word", () => {
     expect(activeWordIndex(timings, 2000)).toBe(-1);
+  });
+});
+
+describe("endCardOpacity", () => {
+  const CONTENT = 10_000;
+  const CARD = 2500;
+
+  it("is 0 during the content portion", () => {
+    expect(endCardOpacity(0, CONTENT, CARD)).toBe(0);
+    expect(endCardOpacity(CONTENT - 1, CONTENT, CARD)).toBe(0);
+    expect(endCardOpacity(CONTENT, CONTENT, CARD)).toBe(0);
+  });
+
+  it("ramps from 0 to 1 over the fade window once content ends", () => {
+    expect(endCardOpacity(CONTENT + END_CARD_FADE_MS / 2, CONTENT, CARD)).toBeCloseTo(0.5);
+    expect(endCardOpacity(CONTENT + END_CARD_FADE_MS, CONTENT, CARD)).toBe(1);
+  });
+
+  it("stays fully opaque for the rest of the card", () => {
+    expect(endCardOpacity(CONTENT + CARD, CONTENT, CARD)).toBe(1);
+  });
+
+  it("is disabled (0) when endCardMs is 0", () => {
+    expect(endCardOpacity(CONTENT + 1000, CONTENT, 0)).toBe(0);
   });
 });
 

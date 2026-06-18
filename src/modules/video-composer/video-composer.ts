@@ -8,6 +8,7 @@ import {
   type CoddyMascotTrack,
   type CoddyVideoProps,
   type ComposeInput,
+  END_CARD_MS,
   type HighlightedLine,
   VIDEO_FPS,
   type VideoComposer,
@@ -71,6 +72,8 @@ export class DefaultVideoComposer implements VideoComposer {
       mascotSheetSrc: "coddy-sheet.png",
       mascotTrack: track,
       durationMs: computeDurationMs(track, timings),
+      endCardMs: END_CARD_MS,
+      brandHandle: input.brandHandle ?? "@CodeWithQuirk",
       fps: VIDEO_FPS,
     };
     if (input.musicPath) {

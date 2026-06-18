@@ -1,6 +1,14 @@
 import { Composition } from "remotion";
-import { type CoddyVideoProps, VIDEO_FPS } from "../src/modules/video-composer/coddy-props";
+import {
+  type CoddyVideoProps,
+  END_CARD_MS,
+  VIDEO_FPS,
+} from "../src/modules/video-composer/coddy-props";
 import { CoddyVideo } from "./CoddyVideo";
+
+/** Total composition length = content + the trailing end card. */
+const totalFrames = (p: { durationMs: number; endCardMs: number; fps: number }) =>
+  Math.max(1, Math.round(((p.durationMs + p.endCardMs) / 1000) * p.fps));
 
 const defaultProps: CoddyVideoProps = {
   hook: "Still writing for-loops like it's 2010?",
@@ -17,6 +25,8 @@ const defaultProps: CoddyVideoProps = {
     segments: [],
   },
   durationMs: 3000,
+  endCardMs: END_CARD_MS,
+  brandHandle: "@CodeWithQuirk",
   fps: VIDEO_FPS,
 };
 
@@ -27,10 +37,10 @@ export const RemotionRoot = () => (
     width={1080}
     height={1920}
     fps={VIDEO_FPS}
-    durationInFrames={Math.round((defaultProps.durationMs / 1000) * VIDEO_FPS)}
+    durationInFrames={totalFrames(defaultProps)}
     defaultProps={defaultProps}
     calculateMetadata={({ props }) => ({
-      durationInFrames: Math.max(1, Math.round((props.durationMs / 1000) * props.fps)),
+      durationInFrames: totalFrames(props),
       fps: props.fps,
     })}
   />

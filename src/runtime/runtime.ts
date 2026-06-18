@@ -369,6 +369,7 @@ export class Runtime {
             timings,
             mascotSheetPath: this.deps.mascotSheetPath,
             outputPath: join(this.deps.outputDir, `${job.id}.mp4`),
+            brandHandle: this.deps.brandHandle,
           });
           // the voiceover + track are baked into the mp4 — don't let temp files pile up
           await rm(audioPath, { force: true }).catch(() => {});

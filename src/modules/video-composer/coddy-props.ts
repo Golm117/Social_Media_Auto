@@ -52,7 +52,12 @@ export type CoddyVideoProps = {
   musicSrc?: string;
   mascotSheetSrc: string;
   mascotTrack: CoddyMascotTrack;
+  /** Length of the content (voiceover) portion — steps/captions/audio span this. */
   durationMs: number;
+  /** Trailing "Like & Follow" end card, appended after the content. */
+  endCardMs: number;
+  /** Brand handle shown on the end card (e.g. "@CodeWithQuirk"). */
+  brandHandle: string;
   fps: number;
 };
 
@@ -65,6 +70,8 @@ export interface ComposeInput {
   timings: CoddyWordTiming[];
   mascotSheetPath: string;
   outputPath: string;
+  /** Brand handle for the end card; defaults to "@CodeWithQuirk". */
+  brandHandle?: string;
 }
 
 export interface VideoComposer {
@@ -73,6 +80,10 @@ export interface VideoComposer {
 
 export const VIDEO_FPS = 30;
 export const VIDEO_TAIL_MS = 800;
+/** Duration of the trailing "Like & Follow" end card. */
+export const END_CARD_MS = 2500;
+/** End-card fade-in duration. */
+export const END_CARD_FADE_MS = 400;
 
 // ─── Pure helpers (unit-tested; used by both Node composer and the composition) ─
 
@@ -106,4 +117,16 @@ export function activeWordIndex(timings: CoddyWordTiming[], ms: number): number 
 export function activeStepIndex(stepCount: number, ms: number, durationMs: number): number {
   if (stepCount <= 0 || durationMs <= 0) return 0;
   return Math.min(stepCount - 1, Math.floor((ms / durationMs) * stepCount));
+}
+
+/**
+ * End-card opacity at `ms`: 0 during the content, then a quick fade-in once the
+ * content has ended. `contentDurationMs` is the voiceover/content length; the
+ * card occupies the trailing `endCardMs` after it.
+ */
+export function endCardOpacity(ms: number, contentDurationMs: number, endCardMs: number): number {
+  if (endCardMs <= 0) return 0;
+  const into = ms - contentDurationMs;
+  if (into <= 0) return 0;
+  return Math.min(1, into / END_CARD_FADE_MS);
 }
