@@ -1,0 +1,59 @@
+# Render Blueprint — one always-on background worker (no inbound HTTP; the bot
+# long-polls Telegram) with a persistent disk for SQLite state + rendered mp4s.
+# Deploy: push this repo to GitHub, then New → Blueprint in the Render dashboard.
+services:
+  - type: worker
+    name: codewithquirk-bot
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    # Standard = 2 GB RAM. Remotion video rendering needs the headroom; the
+    # 512 MB Starter tier will OOM mid-render.
+    plan: standard
+    region: oregon
+    autoDeploy: true
+    disk:
+      name: coddy-data
+      mountPath: /data
+      sizeGB: 5
+    envVars:
+      # ── non-secret config (safe to keep in git) ──
+      - key: USE_MOCK_PUBLISHER
+        value: "false"
+      - key: DATABASE_PATH
+        value: /data/coddy.db
+      - key: OUTPUT_DIR
+        value: /data/media
+      - key: AUTO_TOPIC_LANGUAGES
+        value: javascript,python,typescript,css,sql
+      - key: AUTO_TOPIC_HOUR
+        value: "09:00"
+      - key: SCHEDULE_TZ
+        value: America/Toronto
+      - key: ELEVENLABS_MODEL_ID
+        value: eleven_v3
+      # ── secrets + account ids (set these in the dashboard; sync:false keeps
+      #    them out of the repo) ──
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: E2B_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_VOICE_ID
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_OPERATOR_CHAT_ID
+        sync: false
+      - key: BLOTATO_API_KEY
+        sync: false
+      - key: BLOTATO_INSTAGRAM_ID
+        sync: false
+      - key: BLOTATO_FACEBOOK_ID
+        sync: false
+      - key: BLOTATO_FACEBOOK_PAGE_ID
+        sync: false
+      - key: BLOTATO_TIKTOK_ID
+        sync: false
+      - key: STACKOVERFLOW_API_KEY
+        sync: false
