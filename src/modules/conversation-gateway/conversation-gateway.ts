@@ -1,5 +1,6 @@
 import { Bot, InlineKeyboard, InputFile } from "grammy";
 import type { Job } from "../../domain/job.js";
+import type { PublishTarget } from "../publisher/index.js";
 
 export type OperatorAction = "approve" | "postNow" | "revise" | "reject";
 
@@ -22,6 +23,8 @@ export interface ConversationGateway {
   sendDraftForApproval(job: Job): Promise<void>;
   /** A notify with action buttons, for messages the operator must respond to. */
   sendActionPrompt(job: Job, message: string, actions: OperatorAction[]): Promise<void>;
+  /** Deliver the video + caption for a platform the operator posts by hand (e.g. TikTok). */
+  sendForManualPost(job: Job, platform: PublishTarget, caption: string): Promise<void>;
 }
 
 export interface TelegramGatewayConfig {
@@ -87,6 +90,16 @@ export class TelegramGateway implements ConversationGateway {
     const kb = new InlineKeyboard();
     for (const action of actions) kb.text(ACTION_LABELS[action], `${action}:${job.id}`);
     await this.bot.api.sendMessage(this.operatorChatId, message, { reply_markup: kb });
+  }
+
+  async sendForManualPost(job: Job, platform: PublishTarget, caption: string): Promise<void> {
+    if (!job.mediaPath) return;
+    // video first (with a clear instruction), then the caption as its own message
+    // so it's easy to copy-paste when posting by hand.
+    await this.bot.api.sendVideo(this.operatorChatId, new InputFile(job.mediaPath), {
+      caption: `📱 Post this to ${platform} manually — caption below to copy 👇`,
+    });
+    await this.bot.api.sendMessage(this.operatorChatId, caption);
   }
 
   start(): void {

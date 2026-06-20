@@ -38,6 +38,8 @@ export interface AppConfig {
   blotatoFacebookPageId: string;
   blotatoTiktokId: string;
   publishTargets: PublishTarget[];
+  /** Platforms delivered to the operator to post by hand instead of auto-posting (e.g. TikTok). */
+  manualTargets: PublishTarget[];
   brandHandle: string;
   publicBaseUrl: string;
   databasePath: string;
@@ -79,6 +81,12 @@ export function loadConfig(envPath = ".env"): AppConfig {
     blotatoFacebookPageId: e.BLOTATO_FACEBOOK_PAGE_ID ?? "",
     blotatoTiktokId: e.BLOTATO_TIKTOK_ID ?? "",
     publishTargets: (e.PUBLISH_TARGETS ?? "instagram,facebook,tiktok")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean) as PublishTarget[],
+    // Platforms to hand off for manual posting (e.g. a new TikTok account that
+    // gets shadow-banned for auto-posting). Excluded from auto-publish below.
+    manualTargets: (e.MANUAL_TARGETS ?? "")
       .split(",")
       .map((s) => s.trim())
       .filter(Boolean) as PublishTarget[],

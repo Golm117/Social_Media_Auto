@@ -46,6 +46,8 @@ export interface RuntimeDeps {
   /** Optional background-music file, mixed quietly under the voiceover. */
   musicPath?: string;
   publishTargets: PublishTarget[];
+  /** Platforms handed to the operator to post by hand (excluded from auto-publish). */
+  manualTargets: PublishTarget[];
   brandHandle: string;
   now: () => Date;
 }
@@ -388,8 +390,23 @@ export class Runtime {
         if (!sp || !job.mediaPath) return;
         // on retry, skip platforms that already succeeded — no duplicate posts
         const prior = job.publishResults ?? [];
+
+        // Hand off manual-only platforms (e.g. TikTok) for the operator to post by
+        // hand — once, on the first publish attempt (retries shouldn't re-send).
+        const manual = this.deps.manualTargets;
+        if (prior.length === 0 && manual.length > 0) {
+          for (const p of manual) {
+            const caption = composeCaption(sp.socialCaption, sp.hashtags, {
+              brandHandle: this.deps.brandHandle,
+              platform: p,
+            });
+            await this.deps.gateway.sendForManualPost(job, p, caption);
+          }
+        }
+
         const done = new Set(prior.filter((r) => r.ok).map((r) => r.platform));
-        const targets = this.deps.publishTargets.filter((t) => !done.has(t));
+        // auto-publish targets = configured targets, minus manual ones, minus already-done
+        const targets = this.deps.publishTargets.filter((t) => !manual.includes(t) && !done.has(t));
         if (targets.length === 0) {
           await this.dispatch(job.id, { type: "Published", results: prior });
           return;

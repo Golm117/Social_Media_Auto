@@ -93,6 +93,7 @@ async function main() {
     mascotSheetPath: cfg.mascotSheetPath,
     ...(musicPath ? { musicPath } : {}),
     publishTargets: cfg.publishTargets,
+    manualTargets: cfg.manualTargets,
     brandHandle: cfg.brandHandle,
     now: () => new Date(),
   });

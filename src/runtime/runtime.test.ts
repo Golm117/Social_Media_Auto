@@ -65,6 +65,10 @@ class RecordingGateway implements ConversationGateway {
   async sendActionPrompt(job: Job, message: string, actions: OperatorAction[]) {
     this.prompts.push({ jobId: job.id, message, actions });
   }
+  manualPosts: Array<{ jobId: string; platform: PublishTarget; caption: string }> = [];
+  async sendForManualPost(job: Job, platform: PublishTarget, caption: string) {
+    this.manualPosts.push({ jobId: job.id, platform, caption });
+  }
   queueHandler: (() => Promise<string> | string) | null = null;
   onQueueRequest(handler: () => Promise<string> | string) {
     this.queueHandler = handler;
@@ -77,6 +81,8 @@ function makeRuntime<P extends Publisher = MockPublisher>(overrides?: {
   topicSource?: TopicSource;
   autoTopicLanguages?: string[];
   contentGenerator?: ContentGenerator;
+  manualTargets?: PublishTarget[];
+  publishTargets?: PublishTarget[];
 }) {
   const store = new SqliteJobStore(":memory:");
   const gateway = new RecordingGateway();
@@ -113,7 +119,8 @@ function makeRuntime<P extends Publisher = MockPublisher>(overrides?: {
     ...(overrides?.autoTopicLanguages ? { autoTopicLanguages: overrides.autoTopicLanguages } : {}),
     outputDir: "/tmp",
     mascotSheetPath: "sheet.png",
-    publishTargets: ["instagram", "facebook"],
+    publishTargets: overrides?.publishTargets ?? ["instagram", "facebook"],
+    manualTargets: overrides?.manualTargets ?? [],
     brandHandle: "@CodeWithQuirk",
     now: () => new Date("2026-06-09T12:00:00Z"),
   };
@@ -177,6 +184,25 @@ describe("Runtime", () => {
     const id = await runtime.submitQuestion("q");
     await runtime.handleAction("reject", id);
     expect(store.get(id)?.state).toBe("rejected");
+  });
+
+  it("a manual target (TikTok) is delivered to the operator, NOT auto-posted", async () => {
+    const publisher = new MockPublisher();
+    const { runtime, store, gateway } = makeRuntime({
+      publisher,
+      publishTargets: ["instagram", "facebook", "tiktok"],
+      manualTargets: ["tiktok"],
+    });
+    const id = await runtime.submitQuestion("q");
+    await runtime.handleAction("postNow", id);
+
+    // TikTok was handed off for manual posting with a caption…
+    expect(gateway.manualPosts).toHaveLength(1);
+    expect(gateway.manualPosts[0]?.platform).toBe("tiktok");
+    expect(gateway.manualPosts[0]?.caption.length).toBeGreaterThan(0);
+    // …and the auto-publisher only got the non-manual platforms (no TikTok)
+    expect(publisher.calls[0]?.targets).toEqual(["instagram", "facebook"]);
+    expect(store.get(id)?.state).toBe("posted");
   });
 
   it("ignores a duplicate/stale action without throwing", async () => {
