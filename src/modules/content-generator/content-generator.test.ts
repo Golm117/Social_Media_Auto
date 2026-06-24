@@ -283,11 +283,23 @@ describe("isTransientModelError", () => {
     expect(isTransientModelError(err("X", "Failed to process successful response"))).toBe(true);
   });
 
-  it("treats schema/validation errors as non-transient (deterministic)", () => {
+  it("treats an empty/no-object generation as transient (resample clears it)", () => {
     expect(
-      isTransientModelError(err("AI_TypeValidationError", "Failed to process successful response")),
-    ).toBe(false);
-    expect(isTransientModelError(err("AI_NoObjectGeneratedError"))).toBe(false);
+      isTransientModelError(
+        err(
+          "AI_NoObjectGeneratedError",
+          "No object generated: the model did not return a response.",
+        ),
+      ),
+    ).toBe(true);
+    // matches by message even without the AI_ name
+    expect(isTransientModelError(err("Error", "the model did not return a response"))).toBe(true);
+  });
+
+  it("treats a bare type-validation rejection as non-transient (deterministic)", () => {
+    expect(isTransientModelError(err("AI_TypeValidationError", "value did not match schema"))).toBe(
+      false,
+    );
     expect(isTransientModelError(err("Error", "something else"))).toBe(false);
     expect(isTransientModelError(null)).toBe(false);
   });

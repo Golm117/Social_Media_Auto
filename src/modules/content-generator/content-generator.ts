@@ -75,19 +75,23 @@ export class OpenRouterModelClient implements ModelClient {
 }
 
 /**
- * Whether a model-call error is a transient API hiccup worth retrying. Schema /
- * validation failures are deterministic (same prompt → same bad output), so they
- * are NOT retried — only API/network-level errors that typically clear on retry.
+ * Whether a model-call error is worth retrying. Model output is stochastic, so a
+ * resample usually clears these: transient API/network hiccups, and empty/no-object
+ * generations (AI_NoObjectGeneratedError — "the model did not return a response").
+ * A bare type-validation rejection is the one deterministic case we don't retry.
  */
 export function isTransientModelError(err: unknown): boolean {
   const e = err as { name?: string; message?: string } | null;
   const name = e?.name ?? "";
   const msg = String(e?.message ?? "");
-  if (name === "AI_TypeValidationError" || name === "AI_NoObjectGeneratedError") return false;
+  if (name === "AI_TypeValidationError") return false;
   return (
     name === "AI_APICallError" ||
     name === "AI_RetryError" ||
-    /failed to process successful response/i.test(msg) ||
+    name === "AI_NoObjectGeneratedError" ||
+    /failed to process successful response|did not return a response|no object generated/i.test(
+      msg,
+    ) ||
     /fetch failed|ECONNRESET|ETIMEDOUT|socket hang up|network|timeout/i.test(msg)
   );
 }
