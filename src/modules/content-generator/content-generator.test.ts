@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { z } from "zod";
 import { MascotStateSchema, ScriptPackageSchema } from "../../domain/script-package.js";
 import type { ModelRole } from "./content-generator.js";
-import { DefaultContentGenerator } from "./content-generator.js";
+import {
+  DefaultContentGenerator,
+  isTransientModelError,
+  retryTransient,
+} from "./content-generator.js";
 import type { ModelClient } from "./content-generator.js";
 
 // ─── MockModelClient ────────────────────────────────────────────────────────
@@ -262,6 +266,92 @@ describe("DefaultContentGenerator — malformed assembly", () => {
     const gen = new DefaultContentGenerator(client);
 
     await expect(gen.generate("What is a closure?")).rejects.toThrow();
+  });
+});
+
+describe("isTransientModelError", () => {
+  const err = (name: string, message = "") => Object.assign(new Error(message), { name });
+
+  it("treats API/network errors as transient (retryable)", () => {
+    expect(
+      isTransientModelError(err("AI_APICallError", "Failed to process successful response")),
+    ).toBe(true);
+    expect(isTransientModelError(err("AI_RetryError"))).toBe(true);
+    expect(isTransientModelError(err("Error", "fetch failed"))).toBe(true);
+    expect(isTransientModelError(err("Error", "ETIMEDOUT"))).toBe(true);
+    // matches by message even without the AI_ name
+    expect(isTransientModelError(err("X", "Failed to process successful response"))).toBe(true);
+  });
+
+  it("treats schema/validation errors as non-transient (deterministic)", () => {
+    expect(
+      isTransientModelError(err("AI_TypeValidationError", "Failed to process successful response")),
+    ).toBe(false);
+    expect(isTransientModelError(err("AI_NoObjectGeneratedError"))).toBe(false);
+    expect(isTransientModelError(err("Error", "something else"))).toBe(false);
+    expect(isTransientModelError(null)).toBe(false);
+  });
+});
+
+describe("retryTransient", () => {
+  const noSleep = async () => {};
+
+  it("returns immediately on success without retrying", async () => {
+    let calls = 0;
+    const out = await retryTransient(
+      async () => {
+        calls++;
+        return "ok";
+      },
+      { sleep: noSleep },
+    );
+    expect(out).toBe("ok");
+    expect(calls).toBe(1);
+  });
+
+  it("retries a transient failure then succeeds", async () => {
+    let calls = 0;
+    const out = await retryTransient(
+      async () => {
+        calls++;
+        if (calls < 2)
+          throw Object.assign(new Error("Failed to process successful response"), {
+            name: "AI_APICallError",
+          });
+        return "recovered";
+      },
+      { sleep: noSleep },
+    );
+    expect(out).toBe("recovered");
+    expect(calls).toBe(2);
+  });
+
+  it("gives up after `attempts` transient failures", async () => {
+    let calls = 0;
+    await expect(
+      retryTransient(
+        async () => {
+          calls++;
+          throw Object.assign(new Error("fetch failed"), { name: "AI_APICallError" });
+        },
+        { attempts: 3, sleep: noSleep },
+      ),
+    ).rejects.toThrow("fetch failed");
+    expect(calls).toBe(3);
+  });
+
+  it("does not retry a non-transient error", async () => {
+    let calls = 0;
+    await expect(
+      retryTransient(
+        async () => {
+          calls++;
+          throw Object.assign(new Error("bad schema"), { name: "AI_TypeValidationError" });
+        },
+        { sleep: noSleep },
+      ),
+    ).rejects.toThrow("bad schema");
+    expect(calls).toBe(1);
   });
 });
 

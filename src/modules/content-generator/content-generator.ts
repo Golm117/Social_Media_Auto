@@ -61,11 +61,56 @@ export class OpenRouterModelClient implements ModelClient {
 
   async generateObject<T>(role: ModelRole, prompt: string, schema: z.ZodType<T>): Promise<T> {
     const model = this.provider.chat(this.routing[role]);
-    // Cap output tokens — OpenRouter reserves credits for the full max_tokens, and the
-    // default (64k) is both wasteful and can exceed a low account balance.
-    const result = await generateObject({ model, schema, prompt, maxOutputTokens: 4000 });
-    return result.object;
+    // OpenRouter intermittently returns a 200 whose body the SDK can't parse
+    // ("AI_APICallError: Failed to process successful response"), which the SDK
+    // treats as non-retryable — a single hiccup would otherwise kill the whole
+    // (often unattended) draft. Retry transient failures; the next call is clean.
+    return retryTransient(async () => {
+      // Cap output tokens — OpenRouter reserves credits for the full max_tokens, and the
+      // default (64k) is both wasteful and can exceed a low account balance.
+      const result = await generateObject({ model, schema, prompt, maxOutputTokens: 4000 });
+      return result.object;
+    });
   }
+}
+
+/**
+ * Whether a model-call error is a transient API hiccup worth retrying. Schema /
+ * validation failures are deterministic (same prompt → same bad output), so they
+ * are NOT retried — only API/network-level errors that typically clear on retry.
+ */
+export function isTransientModelError(err: unknown): boolean {
+  const e = err as { name?: string; message?: string } | null;
+  const name = e?.name ?? "";
+  const msg = String(e?.message ?? "");
+  if (name === "AI_TypeValidationError" || name === "AI_NoObjectGeneratedError") return false;
+  return (
+    name === "AI_APICallError" ||
+    name === "AI_RetryError" ||
+    /failed to process successful response/i.test(msg) ||
+    /fetch failed|ECONNRESET|ETIMEDOUT|socket hang up|network|timeout/i.test(msg)
+  );
+}
+
+/** Retry `fn` on transient model errors with linear backoff. `sleep` is injectable for tests. */
+export async function retryTransient<T>(
+  fn: () => Promise<T>,
+  opts?: { attempts?: number; baseDelayMs?: number; sleep?: (ms: number) => Promise<void> },
+): Promise<T> {
+  const attempts = opts?.attempts ?? 3;
+  const baseDelayMs = opts?.baseDelayMs ?? 500;
+  const sleep = opts?.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      if (attempt >= attempts || !isTransientModelError(e)) throw e;
+      await sleep(baseDelayMs * attempt);
+    }
+  }
+  throw lastErr;
 }
 
 // ─── Pipeline schemas ──────────────────────────────────────────────────────
